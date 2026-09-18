@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import mockExperiences from "@/data/mockExperiences";
+import { getExperiences } from "@/data/experiencesStore";
 
 type Role = "hosted" | "attended";
 
@@ -32,22 +33,36 @@ function formatDateRange(startDate: string, endDate: string) {
 
 export default function ExperiencesPage() {
   const [activeTab, setActiveTab] = useState<Role>("hosted");
+  const [experiences, setExperiences] = useState(mockExperiences);
+
+  useEffect(() => {
+    setExperiences(getExperiences());
+  }, []);
 
   const filteredExperiences = useMemo(
     () =>
-      mockExperiences
+      experiences
         .filter((experience) => experience.role === activeTab)
         .sort(
           (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
         ),
-    [activeTab]
+    [experiences, activeTab]
   );
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
-      <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
-        Your Experiences
-      </h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+          Your Experiences
+        </h1>
+
+        <Link
+          href="/experiences/new"
+          className="shrink-0 border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+        >
+          Create Experience
+        </Link>
+      </div>
 
       <div className="mt-8 flex gap-8 border-b border-foreground/10">
         {TABS.map((tab) => {
