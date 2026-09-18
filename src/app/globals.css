@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-quill-new/dist/quill.snow.css";
 
 :root {
   --background: #f6f3ec;
@@ -17,4 +18,47 @@
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+.note-editor .ql-toolbar.ql-snow {
+  border: none;
+  border-bottom: 1px solid rgba(27, 26, 23, 0.1);
+  padding: 0 0 0.5rem;
+}
+
+.note-editor .ql-container.ql-snow {
+  border: none;
+  font-family: var(--font-sans);
+}
+
+.note-editor .ql-editor {
+  min-height: 8rem;
+  padding: 0.75rem 0;
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: var(--foreground);
+}
+
+.note-editor .ql-editor.ql-blank::before {
+  left: 0;
+  font-style: italic;
+  color: rgba(27, 26, 23, 0.4);
+}
+
+.note-editor .ql-snow .ql-stroke {
+  stroke: rgba(27, 26, 23, 0.5);
+}
+
+.note-editor .ql-snow .ql-fill {
+  fill: rgba(27, 26, 23, 0.5);
+}
+
+.note-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
+.note-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke {
+  stroke: var(--accent);
+}
+
+.note-editor .ql-snow.ql-toolbar button:hover .ql-fill,
+.note-editor .ql-snow.ql-toolbar button.ql-active .ql-fill {
+  fill: var(--accent);
 }

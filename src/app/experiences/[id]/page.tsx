@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems } from "@/data/itineraryStore";
+import { getNote, saveNote } from "@/data/notesStore";
+
+// react-quill-new relies on the browser's `document`, so it can only be
+// loaded on the client.
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
+
+const NOTE_SAVE_DEBOUNCE_MS = 800;
+const SAVED_INDICATOR_DURATION_MS = 2000;
+const NOTE_TOOLBAR_MODULES = {
+  toolbar: [["bold", "italic"], [{ list: "bullet" }]],
+};
+const NOTE_FORMATS = ["bold", "italic", "list"];
 
 type Experience = {
   id: number;
@@ -113,6 +126,12 @@ export default function ExperienceDetailPage() {
     undefined
   );
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
+  const [note, setNote] = useState("");
+  const [showSaved, setShowSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   useEffect(() => {
     const experiences = getExperiences();
@@ -121,7 +140,32 @@ export default function ExperienceDetailPage() {
     );
     setExperience(found ?? null);
     setItineraryItems(getItineraryItems(params.id));
+    setNote(getNote(params.id));
   }, [params.id]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+    };
+  }, []);
+
+  function handleNoteChange(value: string) {
+    setNote(value);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveNote(params.id, value);
+      setShowSaved(true);
+
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+      savedIndicatorTimerRef.current = setTimeout(() => {
+        setShowSaved(false);
+      }, SAVED_INDICATOR_DURATION_MS);
+    }, NOTE_SAVE_DEBOUNCE_MS);
+  }
 
   if (experience === undefined) {
     return null;
@@ -201,6 +245,32 @@ export default function ExperienceDetailPage() {
           ))}
         </div>
       )}
+
+      <div className="mt-12 flex items-center justify-between gap-4">
+        <h2 className="font-serif text-2xl text-foreground">Notes to Self</h2>
+        <span
+          className={`text-xs tracking-wide text-accent uppercase transition-opacity ${
+            showSaved ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          Saved
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-foreground/50 italic">
+        Jot down your private notes from this Experience so you can revisit
+        them later
+      </p>
+
+      <div className="note-editor mt-4">
+        <ReactQuill
+          theme="snow"
+          value={note}
+          onChange={(value) => handleNoteChange(value)}
+          modules={NOTE_TOOLBAR_MODULES}
+          formats={NOTE_FORMATS}
+          placeholder="Jot down private notes about this experience..."
+        />
+      </div>
     </main>
   );
 }
