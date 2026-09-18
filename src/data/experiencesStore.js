@@ -41,3 +41,17 @@ export function addExperience(experience) {
   writeToStorage(updatedExperiences);
   return newExperience;
 }
+
+export function updateExperience(id, fields) {
+  const experiences = getExperiences();
+  let updatedExperience = null;
+
+  const updatedExperiences = experiences.map((experience) => {
+    if (experience.id !== id) return experience;
+    updatedExperience = { ...experience, ...fields };
+    return updatedExperience;
+  });
+
+  writeToStorage(updatedExperiences);
+  return updatedExperience;
+}

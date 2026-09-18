@@ -185,9 +185,17 @@ export default function ExperienceDetailPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-      <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
-        {experience.name}
-      </h1>
+      <div className="flex items-baseline gap-3">
+        <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+          {experience.name}
+        </h1>
+        <Link
+          href={`/experiences/${params.id}/edit`}
+          className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          Edit
+        </Link>
+      </div>
       <p className="mt-2 text-sm text-foreground/60">
         {formatDateRange(experience.startDate, experience.endDate)}
         {experience.location ? ` · ${experience.location}` : ""}

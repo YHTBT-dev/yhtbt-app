@@ -1,22 +1,52 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { addExperience } from "@/data/experiencesStore";
+import { FormEvent, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { getExperiences, updateExperience } from "@/data/experiencesStore";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
 
 const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
 
-export default function NewExperiencePage() {
+type Experience = {
+  id: number;
+  name: string;
+  coverImage: string;
+  startDate: string;
+  endDate: string;
+  location?: string;
+  role: string;
+};
+
+export default function EditExperiencePage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
+  const [experience, setExperience] = useState<Experience | null | undefined>(
+    undefined
+  );
   const [name, setName] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const experiences = getExperiences();
+    const found = experiences.find(
+      (item: Experience) => String(item.id) === params.id
+    );
+    setExperience(found ?? null);
+
+    if (found) {
+      setName(found.name);
+      setCoverImage(found.coverImage);
+      setStartDate(found.startDate);
+      setEndDate(found.endDate);
+      setLocation(found.location ?? "");
+    }
+  }, [params.id]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,22 +58,35 @@ export default function NewExperiencePage() {
 
     setError("");
 
-    addExperience({
+    updateExperience(Number(params.id), {
       name,
       coverImage,
       startDate,
       endDate,
       location,
-      role: "hosted",
     });
 
-    router.push("/experiences");
+    router.push(`/experiences/${params.id}`);
+  }
+
+  if (experience === undefined) {
+    return null;
+  }
+
+  if (experience === null) {
+    return (
+      <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+          Experience not found
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
       <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
-        New Experience
+        Edit Experience
       </h1>
 
       <form onSubmit={handleSubmit} className="mt-12 flex flex-col gap-10">
@@ -115,7 +158,7 @@ export default function NewExperiencePage() {
           type="submit"
           className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
         >
-          Create Experience
+          Save Changes
         </button>
       </form>
     </main>
