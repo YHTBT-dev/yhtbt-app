@@ -1,0 +1,206 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { getExperiences } from "@/data/experiencesStore";
+import { getItineraryItems } from "@/data/itineraryStore";
+
+type Experience = {
+  id: number;
+  name: string;
+  coverImage: string;
+  startDate: string;
+  endDate: string;
+  location?: string;
+  role: string;
+};
+
+type ItineraryItem = {
+  id: number;
+  experienceId: string;
+  date: string;
+  // Legacy items created before startTime/endTime existed only have `time`.
+  startTime?: string;
+  endTime?: string;
+  time?: string;
+  title: string;
+  description: string;
+  location: string;
+};
+
+// Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
+// letting `new Date(string)` treat it as UTC, which can shift the date by
+// one day depending on the viewer's timezone offset.
+function parseLocalDate(dateString: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateRange(startDate: string, endDate: string) {
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  };
+
+  if (startDate === endDate) {
+    return start.toLocaleDateString("en-US", opts);
+  }
+
+  return `${start.toLocaleDateString("en-US", opts)} – ${end.toLocaleDateString(
+    "en-US",
+    opts
+  )}`;
+}
+
+function formatDateHeading(date: string) {
+  return parseLocalDate(date).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatTime(time: string | undefined) {
+  if (!time) return "";
+
+  const [hours, minutes] = time.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
+
+  const date = new Date();
+  date.setHours(hours, minutes);
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatTimeRange(item: ItineraryItem) {
+  if (item.startTime || item.endTime) {
+    const start = formatTime(item.startTime);
+    const end = formatTime(item.endTime);
+    if (start && end) return `${start} – ${end}`;
+    return start || end;
+  }
+
+  // Fall back to the legacy single "time" field for items saved before
+  // startTime/endTime was introduced.
+  return formatTime(item.time);
+}
+
+function groupByDate(items: ItineraryItem[]) {
+  const groups: { date: string; items: ItineraryItem[] }[] = [];
+
+  for (const item of items) {
+    const group = groups.find((g) => g.date === item.date);
+    if (group) {
+      group.items.push(item);
+    } else {
+      groups.push({ date: item.date, items: [item] });
+    }
+  }
+
+  return groups;
+}
+
+export default function ExperienceDetailPage() {
+  const params = useParams<{ id: string }>();
+  const [experience, setExperience] = useState<Experience | null | undefined>(
+    undefined
+  );
+  const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
+
+  useEffect(() => {
+    const experiences = getExperiences();
+    const found = experiences.find(
+      (item: Experience) => String(item.id) === params.id
+    );
+    setExperience(found ?? null);
+    setItineraryItems(getItineraryItems(params.id));
+  }, [params.id]);
+
+  if (experience === undefined) {
+    return null;
+  }
+
+  if (experience === null) {
+    return (
+      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+          Experience not found
+        </div>
+      </main>
+    );
+  }
+
+  const groupedItinerary = groupByDate(itineraryItems);
+
+  return (
+    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
+      <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+        {experience.name}
+      </h1>
+      <p className="mt-2 text-sm text-foreground/60">
+        {formatDateRange(experience.startDate, experience.endDate)}
+        {experience.location ? ` · ${experience.location}` : ""}
+      </p>
+
+      <div className="mt-12 flex items-center justify-between gap-4">
+        <h2 className="font-serif text-2xl text-foreground">Itinerary</h2>
+        <Link
+          href={`/experiences/${params.id}/itinerary/new`}
+          className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+        >
+          Add Itinerary Item
+        </Link>
+      </div>
+
+      {groupedItinerary.length === 0 ? (
+        <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+          No itinerary yet
+        </div>
+      ) : (
+        <div className="mt-8 flex flex-col gap-10">
+          {groupedItinerary.map((group) => (
+            <div key={group.date}>
+              <h3 className="text-sm tracking-wide text-accent uppercase">
+                {formatDateHeading(group.date)}
+              </h3>
+              <div className="mt-4 flex flex-col gap-6 border-t border-foreground/10 pt-4">
+                {group.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_auto] sm:gap-6"
+                  >
+                    <p className="text-sm text-foreground/60 whitespace-nowrap sm:w-44 sm:shrink-0">
+                      {formatTimeRange(item)}
+                    </p>
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {item.title}
+                      </p>
+                      {item.description ? (
+                        <p className="mt-1 text-sm text-foreground/60">
+                          {item.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    {item.location ? (
+                      <p className="text-sm text-foreground/60 sm:text-right">
+                        {item.location}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}

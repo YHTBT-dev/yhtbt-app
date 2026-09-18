@@ -12,9 +12,17 @@ const TABS: { label: string; value: Role }[] = [
   { label: "Attended", value: "attended" },
 ];
 
+// Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
+// letting `new Date(string)` treat it as UTC, which can shift the date by
+// one day depending on the viewer's timezone offset.
+function parseLocalDate(dateString: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function formatDateRange(startDate: string, endDate: string) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
   const opts: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
@@ -63,6 +71,18 @@ export default function ExperiencesPage() {
           Create Experience
         </Link>
       </div>
+
+      {/* Dev-only: remove before shipping */}
+      <button
+        type="button"
+        onClick={() => {
+          window.localStorage.clear();
+          window.location.reload();
+        }}
+        className="mt-4 text-xs text-foreground/40 underline underline-offset-2 hover:text-red-600"
+      >
+        Clear all data (dev)
+      </button>
 
       <div className="mt-8 flex gap-8 border-b border-foreground/10">
         {TABS.map((tab) => {
