@@ -40,6 +40,7 @@ type ItineraryItem = {
   title: string;
   description: string;
   location: string;
+  dressCode?: string;
 };
 
 // Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
@@ -238,6 +239,11 @@ export default function ExperienceDetailPage() {
                       {item.description ? (
                         <p className="mt-1 text-sm text-foreground/60">
                           {item.description}
+                        </p>
+                      ) : null}
+                      {item.dressCode ? (
+                        <p className="mt-1 text-sm text-foreground/60">
+                          Dress code: {item.dressCode}
                         </p>
                       ) : null}
                     </div>

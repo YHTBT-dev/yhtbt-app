@@ -26,6 +26,7 @@ export default function NewItineraryItemPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [dressCode, setDressCode] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function NewItineraryItemPage() {
       title,
       description,
       location,
+      dressCode,
     });
 
     router.push(`/experiences/${params.id}`);
@@ -128,17 +130,30 @@ export default function NewItineraryItemPage() {
           />
         </label>
 
-        <label className="block">
-          <span className={LABEL_CLASSES}>Location</span>
-          <input
-            type="text"
-            required
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-            placeholder="Los Angeles, CA"
-            className={FIELD_CLASSES}
-          />
-        </label>
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+          <label className="block">
+            <span className={LABEL_CLASSES}>Location</span>
+            <input
+              type="text"
+              required
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+              placeholder="Los Angeles, CA"
+              className={FIELD_CLASSES}
+            />
+          </label>
+
+          <label className="block">
+            <span className={LABEL_CLASSES}>Dress Code (Optional)</span>
+            <input
+              type="text"
+              value={dressCode}
+              onChange={(event) => setDressCode(event.target.value)}
+              placeholder="Cocktail attire"
+              className={FIELD_CLASSES}
+            />
+          </label>
+        </div>
 
         <label className="block">
           <span className={LABEL_CLASSES}>Description</span>

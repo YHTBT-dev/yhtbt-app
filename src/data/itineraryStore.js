@@ -1,5 +1,8 @@
 const STORAGE_KEY = "yhtbt:itinerary";
 
+// Item shape: { id, experienceId, date, startTime, endTime, title,
+// description, location, dressCode? }. dressCode is optional.
+
 function readFromStorage() {
   if (typeof window === "undefined") return [];
 
