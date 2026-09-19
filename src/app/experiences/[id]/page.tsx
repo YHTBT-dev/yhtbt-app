@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems } from "@/data/itineraryStore";
 import { getNote, saveNote } from "@/data/notesStore";
+import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -18,6 +19,31 @@ const NOTE_TOOLBAR_MODULES = {
   toolbar: [["bold", "italic"], [{ list: "bullet" }]],
 };
 const NOTE_FORMATS = ["bold", "italic", "list"];
+const RSVP_STATUS_OPTIONS: { label: string; value: Guest["rsvpStatus"] }[] = [
+  { label: "Invited", value: "invited" },
+  { label: "Confirmed", value: "confirmed" },
+  { label: "Declined", value: "declined" },
+];
+type GuestTabStatus = Guest["rsvpStatus"] | "all";
+
+const GUEST_TABS: {
+  label: string;
+  status: GuestTabStatus;
+  emptyMessage: string;
+}[] = [
+  { label: "All Guests", status: "all", emptyMessage: "No guests yet" },
+  {
+    label: "Who's Attending",
+    status: "confirmed",
+    emptyMessage: "No confirmed guests yet",
+  },
+  { label: "Invited", status: "invited", emptyMessage: "No invited guests" },
+  {
+    label: "Declined",
+    status: "declined",
+    emptyMessage: "No declined guests",
+  },
+];
 
 type Experience = {
   id: number;
@@ -41,6 +67,14 @@ type ItineraryItem = {
   description: string;
   location: string;
   dressCode?: string;
+};
+
+type Guest = {
+  id: number;
+  experienceId: string;
+  name: string;
+  email: string;
+  rsvpStatus: "invited" | "confirmed" | "declined";
 };
 
 // Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
@@ -127,6 +161,10 @@ export default function ExperienceDetailPage() {
     undefined
   );
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestTab, setGuestTab] = useState<GuestTabStatus>("confirmed");
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -141,8 +179,36 @@ export default function ExperienceDetailPage() {
     );
     setExperience(found ?? null);
     setItineraryItems(getItineraryItems(params.id));
+    setGuests(getGuests(params.id));
     setNote(getNote(params.id));
   }, [params.id]);
+
+  function handleAddGuest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const newGuest = addGuest({
+      experienceId: params.id,
+      name: guestName,
+      email: guestEmail,
+      rsvpStatus: "invited",
+    });
+
+    setGuests((current) => [...current, newGuest]);
+    setGuestName("");
+    setGuestEmail("");
+  }
+
+  function handleRsvpStatusChange(
+    guestId: number,
+    rsvpStatus: Guest["rsvpStatus"]
+  ) {
+    const updatedGuest = updateGuestStatus(guestId, rsvpStatus);
+    if (!updatedGuest) return;
+
+    setGuests((current) =>
+      current.map((item) => (item.id === guestId ? updatedGuest : item))
+    );
+  }
 
   useEffect(() => {
     return () => {
@@ -259,6 +325,118 @@ export default function ExperienceDetailPage() {
           ))}
         </div>
       )}
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">Guests</h2>
+
+        <form
+          onSubmit={handleAddGuest}
+          className="mt-6 grid grid-cols-1 items-end gap-6 sm:grid-cols-[1fr_1fr_auto]"
+        >
+          <label className="block">
+            <span className="text-sm tracking-wide text-foreground/50 uppercase">
+              Name
+            </span>
+            <input
+              type="text"
+              required
+              value={guestName}
+              onChange={(event) => setGuestName(event.target.value)}
+              placeholder="Jamie Rivera"
+              className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm tracking-wide text-foreground/50 uppercase">
+              Email
+            </span>
+            <input
+              type="email"
+              required
+              value={guestEmail}
+              onChange={(event) => setGuestEmail(event.target.value)}
+              placeholder="jamie@example.com"
+              className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          >
+            Add Guest
+          </button>
+        </form>
+
+        <div className="mt-8 flex gap-8 border-b border-foreground/10">
+          {GUEST_TABS.map((tab) => {
+            const isActive = tab.status === guestTab;
+            const count =
+              tab.status === "all"
+                ? guests.length
+                : guests.filter((guest) => guest.rsvpStatus === tab.status)
+                    .length;
+            return (
+              <button
+                key={tab.status}
+                type="button"
+                onClick={() => setGuestTab(tab.status)}
+                className={`-mb-px border-b-2 pb-3 text-sm tracking-wide uppercase transition-colors ${
+                  isActive
+                    ? "border-accent text-accent"
+                    : "border-transparent text-foreground/50 hover:text-accent"
+                }`}
+              >
+                {tab.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {(() => {
+          const activeTab = GUEST_TABS.find((tab) => tab.status === guestTab)!;
+          const tabGuests =
+            guestTab === "all"
+              ? guests
+              : guests.filter((guest) => guest.rsvpStatus === guestTab);
+
+          return tabGuests.length === 0 ? (
+            <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              {activeTab.emptyMessage}
+            </div>
+          ) : (
+            <div className="mt-8 divide-y divide-foreground/10 border-t border-foreground/10">
+              {tabGuests.map((guest) => (
+                <div
+                  key={guest.id}
+                  className="flex items-center justify-between gap-4 py-3"
+                >
+                  <p className="font-serif text-lg text-foreground">
+                    {guest.name}
+                  </p>
+                  <select
+                    value={guest.rsvpStatus}
+                    onChange={(event) =>
+                      handleRsvpStatusChange(
+                        guest.id,
+                        event.target.value as Guest["rsvpStatus"]
+                      )
+                    }
+                    className="border-b border-foreground/10 bg-transparent py-1 text-xs tracking-wide text-accent uppercase focus:border-accent focus:outline-none"
+                  >
+                    {RSVP_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
 
       <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">Notes to Self</h2>
