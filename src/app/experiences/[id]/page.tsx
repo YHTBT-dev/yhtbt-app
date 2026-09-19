@@ -252,7 +252,11 @@ export default function ExperienceDetailPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-      <div className="flex items-baseline gap-3">
+      <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+        Host View
+      </span>
+
+      <div className="mt-3 flex items-baseline gap-3">
         <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
           {experience.name}
         </h1>
