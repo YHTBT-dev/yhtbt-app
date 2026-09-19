@@ -1,7 +1,9 @@
 const STORAGE_KEY = "yhtbt:guests";
 
-// Guest shape: { id, experienceId, name, email, rsvpStatus }.
-// rsvpStatus is one of "invited", "confirmed", "declined".
+// Guest shape: { id, experienceId, name, email, rsvpStatus, everConfirmed }.
+// rsvpStatus is one of "invited", "confirmed", "declined". everConfirmed is
+// a permanent record: once true, it stays true even if rsvpStatus later
+// changes away from "confirmed" — it powers the Attendee Directory.
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
@@ -25,15 +27,26 @@ function getAllGuests() {
   return readFromStorage();
 }
 
+// Guests already "confirmed" but recorded before everConfirmed existed
+// still count as ever confirmed.
+function normalizeGuest(guest) {
+  return {
+    ...guest,
+    everConfirmed: !!guest.everConfirmed || guest.rsvpStatus === "confirmed",
+  };
+}
+
 export function getGuests(experienceId) {
-  return getAllGuests().filter((guest) => guest.experienceId === experienceId);
+  return getAllGuests()
+    .filter((guest) => guest.experienceId === experienceId)
+    .map(normalizeGuest);
 }
 
 export function addGuest(guest) {
   const guests = getAllGuests();
   const nextId = guests.reduce((maxId, existing) => Math.max(maxId, existing.id), 0) + 1;
 
-  const newGuest = { id: nextId, ...guest };
+  const newGuest = normalizeGuest({ id: nextId, ...guest });
   const updatedGuests = [...guests, newGuest];
 
   writeToStorage(updatedGuests);
@@ -46,7 +59,7 @@ export function updateGuestStatus(id, rsvpStatus) {
 
   const updatedGuests = guests.map((guest) => {
     if (guest.id !== id) return guest;
-    updatedGuest = { ...guest, rsvpStatus };
+    updatedGuest = normalizeGuest({ ...guest, rsvpStatus });
     return updatedGuest;
   });
 

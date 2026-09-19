@@ -39,7 +39,7 @@ const RSVP_STATUS_OPTIONS: { label: string; value: Guest["rsvpStatus"] }[] = [
   { label: "Confirmed", value: "confirmed" },
   { label: "Declined", value: "declined" },
 ];
-type GuestTabStatus = Guest["rsvpStatus"] | "all";
+type GuestTabStatus = Guest["rsvpStatus"] | "all" | "directory";
 
 const GUEST_TABS: {
   label: string;
@@ -57,6 +57,11 @@ const GUEST_TABS: {
     label: "Declined",
     status: "declined",
     emptyMessage: "No declined guests",
+  },
+  {
+    label: "Attendee Directory",
+    status: "directory",
+    emptyMessage: "No confirmed attendees yet",
   },
 ];
 
@@ -90,6 +95,7 @@ type Guest = {
   name: string;
   email: string;
   rsvpStatus: "invited" | "confirmed" | "declined";
+  everConfirmed?: boolean;
 };
 
 type Update = {
@@ -1440,8 +1446,10 @@ export default function ExperienceDetailPage() {
             const count =
               tab.status === "all"
                 ? guests.length
-                : guests.filter((guest) => guest.rsvpStatus === tab.status)
-                    .length;
+                : tab.status === "directory"
+                  ? guests.filter((guest) => guest.everConfirmed).length
+                  : guests.filter((guest) => guest.rsvpStatus === tab.status)
+                      .length;
             return (
               <button
                 key={tab.status}
@@ -1461,6 +1469,30 @@ export default function ExperienceDetailPage() {
 
         {(() => {
           const activeTab = GUEST_TABS.find((tab) => tab.status === guestTab)!;
+
+          if (guestTab === "directory") {
+            const confirmedGuests = guests.filter(
+              (guest) => guest.everConfirmed
+            );
+
+            return confirmedGuests.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+                {activeTab.emptyMessage}
+              </div>
+            ) : (
+              <div className="mt-8 divide-y divide-foreground/10 border-t border-foreground/10">
+                {confirmedGuests.map((guest) => (
+                  <p
+                    key={guest.id}
+                    className="py-3 font-serif text-lg text-foreground"
+                  >
+                    {guest.name}
+                  </p>
+                ))}
+              </div>
+            );
+          }
+
           const tabGuests =
             guestTab === "all"
               ? guests
