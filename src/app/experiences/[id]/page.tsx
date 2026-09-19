@@ -421,6 +421,9 @@ export default function ExperienceDetailPage() {
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  // Local-only, resets on every page load; purely a visual preview, not
+  // real access control.
+  const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [coverImageError, setCoverImageError] = useState(false);
   const [updates, setUpdates] = useState<Update[]>([]);
@@ -929,20 +932,31 @@ export default function ExperienceDetailPage() {
             : "border-b border-transparent"
         }`}
       >
-        <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
-          Host View
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+            {isPreviewingAsGuest ? "Previewing as: Guest" : "Host View"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsPreviewingAsGuest((current) => !current)}
+            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            {isPreviewingAsGuest ? "Switch to Host View" : "Preview as Guest"}
+          </button>
+        </div>
 
         <div className="mt-3 flex items-baseline gap-3">
           <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
             {experience.name}
           </h1>
-          <Link
-            href={`/experiences/${params.id}/edit`}
-            className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
-          >
-            Edit
-          </Link>
+          {isPreviewingAsGuest ? null : (
+            <Link
+              href={`/experiences/${params.id}/edit`}
+              className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+            >
+              Edit
+            </Link>
+          )}
         </div>
         <p className="mt-2 text-sm text-foreground/60">
           {formatDateRange(experience.startDate, experience.endDate)}
@@ -965,6 +979,7 @@ export default function ExperienceDetailPage() {
 
       {collapsedSections.itinerary ? null : (
         <>
+          {isPreviewingAsGuest ? null : (
           <div className="mt-6 flex justify-end">
             <Link
               href={`/experiences/${params.id}/itinerary/new`}
@@ -973,6 +988,7 @@ export default function ExperienceDetailPage() {
               Add Itinerary Item
             </Link>
           </div>
+          )}
 
           {groupedItinerary.length === 0 ? (
         <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
@@ -1014,12 +1030,14 @@ export default function ExperienceDetailPage() {
                         <p className="font-serif text-lg text-foreground">
                           {item.title}
                         </p>
+                        {isPreviewingAsGuest ? null : (
                         <Link
                           href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
                           className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
                         >
                           Edit
                         </Link>
+                        )}
                       </div>
                       {item.description ? (
                         <p className="mt-1 text-sm text-foreground/60">
@@ -1072,6 +1090,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.updates ? null : (
           <>
+            {isPreviewingAsGuest ? null : (
             <form
               onSubmit={handleAddUpdate}
               className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end"
@@ -1097,6 +1116,7 @@ export default function ExperienceDetailPage() {
                 Post
               </button>
             </form>
+            )}
 
             {updates.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
@@ -1137,6 +1157,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.faqs ? null : (
           <>
+            {isPreviewingAsGuest ? null : (
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
@@ -1146,6 +1167,7 @@ export default function ExperienceDetailPage() {
                 Add FAQ
               </button>
             </div>
+            )}
 
             <Modal
               isOpen={isFaqModalOpen}
@@ -1384,6 +1406,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.guests ? null : (
         <>
+        {isPreviewingAsGuest ? null : (
         <div className="mt-6 flex justify-end">
           <button
             type="button"
@@ -1393,6 +1416,7 @@ export default function ExperienceDetailPage() {
             Add Guest
           </button>
         </div>
+        )}
 
         <Modal
           isOpen={isGuestModalOpen}
@@ -1440,6 +1464,7 @@ export default function ExperienceDetailPage() {
           </form>
         </Modal>
 
+        {isPreviewingAsGuest ? null : (
         <div className="mt-8 flex gap-8 border-b border-foreground/10">
           {GUEST_TABS.map((tab) => {
             const isActive = tab.status === guestTab;
@@ -1466,11 +1491,17 @@ export default function ExperienceDetailPage() {
             );
           })}
         </div>
+        )}
 
         {(() => {
-          const activeTab = GUEST_TABS.find((tab) => tab.status === guestTab)!;
+          const effectiveGuestTab = isPreviewingAsGuest
+            ? "directory"
+            : guestTab;
+          const activeTab = GUEST_TABS.find(
+            (tab) => tab.status === effectiveGuestTab
+          )!;
 
-          if (guestTab === "directory") {
+          if (effectiveGuestTab === "directory") {
             const confirmedGuests = guests.filter(
               (guest) => guest.everConfirmed
             );
@@ -1551,6 +1582,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.travelDetails ? null : (
         <>
+        {isPreviewingAsGuest ? null : (
         <div className="mt-6 flex justify-end">
           <button
             type="button"
@@ -1560,6 +1592,7 @@ export default function ExperienceDetailPage() {
             Add Travel Detail
           </button>
         </div>
+        )}
 
         <Modal
           isOpen={isTravelDetailModalOpen}
@@ -2241,6 +2274,7 @@ export default function ExperienceDetailPage() {
                               {formatSingleDate(entry.arrivalDate)} at{" "}
                               {formatTime(entry.arrivalTime)}
                             </p>
+                            {isPreviewingAsGuest ? null : (
                             <button
                               type="button"
                               onClick={() => handleStartEditTravelDetail(entry)}
@@ -2248,6 +2282,7 @@ export default function ExperienceDetailPage() {
                             >
                               Edit
                             </button>
+                            )}
                           </div>
                         );
                       }
@@ -2281,6 +2316,7 @@ export default function ExperienceDetailPage() {
                                   : ""}
                               </p>
                             </div>
+                            {isPreviewingAsGuest ? null : (
                             <button
                               type="button"
                               onClick={() => handleStartEditTravelDetail(entry)}
@@ -2288,6 +2324,7 @@ export default function ExperienceDetailPage() {
                             >
                               Edit
                             </button>
+                            )}
                           </div>
                         );
                       }
@@ -2312,6 +2349,7 @@ export default function ExperienceDetailPage() {
                               </p>
                             ) : null}
                           </div>
+                          {isPreviewingAsGuest ? null : (
                           <button
                             type="button"
                             onClick={() => handleStartEditTravelDetail(entry)}
@@ -2319,6 +2357,7 @@ export default function ExperienceDetailPage() {
                           >
                             Edit
                           </button>
+                          )}
                         </div>
                       );
                     })}
@@ -2332,6 +2371,8 @@ export default function ExperienceDetailPage() {
         )}
       </div>
 
+      {!isPreviewingAsGuest && (
+      <>
       <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">
           <button
@@ -2370,6 +2411,8 @@ export default function ExperienceDetailPage() {
             />
           </div>
         </>
+      )}
+      </>
       )}
       </main>
     </>

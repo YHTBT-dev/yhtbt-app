@@ -1,5 +1,10 @@
 const STORAGE_KEY = "yhtbt:notes";
 
+// FUTURE: Once guest accounts exist, notes should be keyed by (experienceId + userId),
+// not just experienceId — each person's notes are private to them, not shared per-Experience.
+// Current implementation is a single note per Experience for the host, as a placeholder
+// until real guest identity is built.
+
 function readFromStorage() {
   if (typeof window === "undefined") return {};
 
