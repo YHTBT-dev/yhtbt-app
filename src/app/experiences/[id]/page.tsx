@@ -292,6 +292,17 @@ function formatTimeRange(item: ItineraryItem) {
   return formatTime(item.time);
 }
 
+function combineDateAndTime(dateString: string, timeString: string | undefined) {
+  const date = parseLocalDate(dateString);
+  if (!date || !timeString) return null;
+
+  const [hours, minutes] = timeString.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+}
+
 function groupByDate(items: ItineraryItem[]) {
   const groups: { date: string; items: ItineraryItem[] }[] = [];
 
@@ -404,6 +415,7 @@ export default function ExperienceDetailPage() {
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const [coverImageError, setCoverImageError] = useState(false);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [updateMessage, setUpdateMessage] = useState("");
@@ -435,6 +447,11 @@ export default function ExperienceDetailPage() {
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -837,6 +854,48 @@ export default function ExperienceDetailPage() {
 
   const groupedItinerary = groupByDate(itineraryItems);
 
+  // Live "happening now" / "up next" highlighting only makes sense while
+  // the experience is actually underway (today falls within its date
+  // range) — otherwise leave the itinerary unhighlighted.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const experienceStartDate = parseLocalDate(experience.startDate);
+  const experienceEndDate = parseLocalDate(experience.endDate);
+  const isExperienceOngoingToday =
+    !!experienceStartDate &&
+    !!experienceEndDate &&
+    today >= experienceStartDate &&
+    today <= experienceEndDate;
+
+  let happeningNowItemId: number | null = null;
+  let upNextItemId: number | null = null;
+
+  if (isExperienceOngoingToday) {
+    const flatItineraryItems = groupedItinerary.flatMap((group) => group.items);
+
+    for (const item of flatItineraryItems) {
+      const start = combineDateAndTime(item.date, item.startTime ?? item.time);
+      const end = combineDateAndTime(item.date, item.endTime ?? item.time);
+      if (!start || !end) continue;
+      if (now >= start && now <= end) {
+        happeningNowItemId = item.id;
+        break;
+      }
+    }
+
+    if (happeningNowItemId === null) {
+      let soonestStart: Date | null = null;
+      for (const item of flatItineraryItems) {
+        const start = combineDateAndTime(item.date, item.startTime ?? item.time);
+        if (!start || start <= now) continue;
+        if (!soonestStart || start < soonestStart) {
+          soonestStart = start;
+          upNextItemId = item.id;
+        }
+      }
+    }
+  }
+
   return (
     <>
       <div className="relative h-64 w-full overflow-hidden sm:h-80">
@@ -921,15 +980,30 @@ export default function ExperienceDetailPage() {
                 {formatDateHeading(group.date)}
               </h3>
               <div className="mt-4 flex flex-col gap-6 border-t border-foreground/10 pt-4">
-                {group.items.map((item) => (
+                {group.items.map((item) => {
+                  const isHappeningNow = item.id === happeningNowItemId;
+                  const isUpNext = item.id === upNextItemId;
+
+                  return (
                   <div
                     key={item.id}
-                    className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_auto] sm:gap-6"
+                    className={`grid grid-cols-1 gap-2 border-l-2 py-1 pl-4 transition-colors sm:grid-cols-[auto_1fr_auto] sm:gap-6 ${
+                      isHappeningNow
+                        ? "border-accent bg-accent/5"
+                        : isUpNext
+                          ? "border-accent/40"
+                          : "border-transparent"
+                    }`}
                   >
                     <p className="text-sm text-foreground/60 whitespace-nowrap sm:w-44 sm:shrink-0">
                       {formatTimeRange(item)}
                     </p>
                     <div>
+                      {isHappeningNow || isUpNext ? (
+                        <span className="mb-1 inline-block border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-widest text-accent uppercase">
+                          {isHappeningNow ? "Happening Now" : "Up Next"}
+                        </span>
+                      ) : null}
                       <div className="flex items-baseline gap-2">
                         <p className="font-serif text-lg text-foreground">
                           {item.title}
@@ -968,7 +1042,8 @@ export default function ExperienceDetailPage() {
                       </div>
                     ) : null}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
