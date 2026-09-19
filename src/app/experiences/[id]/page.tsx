@@ -14,6 +14,7 @@ import {
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
+import { addFaq, getFaqs } from "@/data/faqsStore";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -88,6 +89,13 @@ type Update = {
   experienceId: string;
   message: string;
   timestamp: string;
+};
+
+type Faq = {
+  id: number;
+  experienceId: string;
+  question: string;
+  answer: string;
 };
 
 type FlightDetail = {
@@ -378,6 +386,9 @@ export default function ExperienceDetailPage() {
   const [coverImageError, setCoverImageError] = useState(false);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [faqQuestion, setFaqQuestion] = useState("");
+  const [faqAnswer, setFaqAnswer] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
@@ -409,6 +420,7 @@ export default function ExperienceDetailPage() {
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
     setUpdates(getUpdates(params.id));
+    setFaqs(getFaqs(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -429,6 +441,20 @@ export default function ExperienceDetailPage() {
 
     setUpdates((current) => [newUpdate, ...current]);
     setUpdateMessage("");
+  }
+
+  function handleAddFaq(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const newFaq = addFaq({
+      experienceId: params.id,
+      question: faqQuestion,
+      answer: faqAnswer,
+    });
+
+    setFaqs((current) => [...current, newFaq]);
+    setFaqQuestion("");
+    setFaqAnswer("");
   }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -881,6 +907,84 @@ export default function ExperienceDetailPage() {
                     </p>
                     <p className="mt-1 text-sm text-foreground/60">
                       {formatRelativeTime(update.timestamp)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("faqs")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.faqs} />
+            FAQs
+          </button>
+        </h2>
+
+        {collapsedSections.faqs ? null : (
+          <>
+            <form
+              onSubmit={handleAddFaq}
+              className="mt-6 flex flex-col gap-6"
+            >
+              <label className="block">
+                <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  Question
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={faqQuestion}
+                  onChange={(event) => setFaqQuestion(event.target.value)}
+                  placeholder="Is there parking on site?"
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  Answer
+                </span>
+                <textarea
+                  required
+                  rows={3}
+                  value={faqAnswer}
+                  onChange={(event) => setFaqAnswer(event.target.value)}
+                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add FAQ
+              </button>
+            </form>
+
+            {faqs.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+                No FAQs yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {faqs.map((faq) => (
+                  <div
+                    key={faq.id}
+                    className="border-b border-foreground/10 pb-8 last:border-b-0"
+                  >
+                    <p className="font-serif text-lg text-foreground">
+                      {faq.question}
+                    </p>
+                    <p className="mt-1 text-sm text-foreground/60">
+                      {faq.answer}
                     </p>
                   </div>
                 ))}
