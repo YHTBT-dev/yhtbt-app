@@ -2,8 +2,8 @@ const STORAGE_KEY = "yhtbt:travelDetails";
 
 // Entry shape depends on "type":
 // - flight: { id, experienceId, type: "flight", guestName?, airline,
-//   flightNumber, departureAirport, arrivalAirport, departureTime,
-//   arrivalTime }
+//   flightNumber, departureAirport, arrivalAirport, departureDate?,
+//   departureTime?, arrivalDate, arrivalTime }
 // - hotel: { id, experienceId, type: "hotel", hotelName, address,
 //   checkInDate, checkOutDate, confirmationNumber? }
 // - transport: { id, experienceId, type: "transport", description,

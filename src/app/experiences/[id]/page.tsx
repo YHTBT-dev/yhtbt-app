@@ -90,7 +90,9 @@ type FlightDetail = {
   flightNumber: string;
   departureAirport: string;
   arrivalAirport: string;
-  departureTime: string;
+  departureDate?: string;
+  departureTime?: string;
+  arrivalDate: string;
   arrivalTime: string;
 };
 
@@ -246,7 +248,9 @@ export default function ExperienceDetailPage() {
   const [flightNumber, setFlightNumber] = useState("");
   const [departureAirport, setDepartureAirport] = useState("");
   const [arrivalAirport, setArrivalAirport] = useState("");
+  const [departureDate, setDepartureDate] = useState("");
   const [departureTime, setDepartureTime] = useState("");
+  const [arrivalDate, setArrivalDate] = useState("");
   const [arrivalTime, setArrivalTime] = useState("");
   // Hotel fields
   const [hotelName, setHotelName] = useState("");
@@ -261,10 +265,21 @@ export default function ExperienceDetailPage() {
   const [transportNotes, setTransportNotes] = useState("");
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+
+  useEffect(() => {
+    function handleScroll() {
+      setIsScrolled(window.scrollY > 0);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     const experiences = getExperiences();
@@ -319,7 +334,9 @@ export default function ExperienceDetailPage() {
         flightNumber,
         departureAirport,
         arrivalAirport,
+        departureDate,
         departureTime,
+        arrivalDate,
         arrivalTime,
       });
       setFlightGuestName("");
@@ -327,7 +344,9 @@ export default function ExperienceDetailPage() {
       setFlightNumber("");
       setDepartureAirport("");
       setArrivalAirport("");
+      setDepartureDate("");
       setDepartureTime("");
+      setArrivalDate("");
       setArrivalTime("");
     } else if (travelDetailType === "hotel") {
       newEntry = addTravelDetail({
@@ -404,25 +423,33 @@ export default function ExperienceDetailPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-      <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
-        Host View
-      </span>
+      <div
+        className={`sticky top-0 z-10 bg-background pb-4 transition-shadow duration-200 ${
+          isScrolled
+            ? "border-b border-foreground/10 shadow-sm"
+            : "border-b border-transparent"
+        }`}
+      >
+        <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+          Host View
+        </span>
 
-      <div className="mt-3 flex items-baseline gap-3">
-        <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
-          {experience.name}
-        </h1>
-        <Link
-          href={`/experiences/${params.id}/edit`}
-          className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
-        >
-          Edit
-        </Link>
+        <div className="mt-3 flex items-baseline gap-3">
+          <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+            {experience.name}
+          </h1>
+          <Link
+            href={`/experiences/${params.id}/edit`}
+            className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            Edit
+          </Link>
+        </div>
+        <p className="mt-2 text-sm text-foreground/60">
+          {formatDateRange(experience.startDate, experience.endDate)}
+          {experience.location ? ` · ${experience.location}` : ""}
+        </p>
       </div>
-      <p className="mt-2 text-sm text-foreground/60">
-        {formatDateRange(experience.startDate, experience.endDate)}
-        {experience.location ? ` · ${experience.location}` : ""}
-      </p>
 
       <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">Itinerary</h2>
@@ -628,11 +655,17 @@ export default function ExperienceDetailPage() {
                 </span>
                 <input
                   type="text"
+                  list="guest-name-options"
                   value={flightGuestName}
                   onChange={(event) => setFlightGuestName(event.target.value)}
                   placeholder="Amina"
                   className={TRAVEL_FIELD_CLASSES}
                 />
+                <datalist id="guest-name-options">
+                  {guests.map((guest) => (
+                    <option key={guest.id} value={guest.name} />
+                  ))}
+                </datalist>
               </label>
 
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -698,13 +731,37 @@ export default function ExperienceDetailPage() {
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <label className="block">
                   <span className={TRAVEL_LABEL_CLASSES}>
-                    Departure Time
+                    Departure Date (Optional)
+                  </span>
+                  <input
+                    type="date"
+                    value={departureDate}
+                    onChange={(event) => setDepartureDate(event.target.value)}
+                    className={TRAVEL_FIELD_CLASSES}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className={TRAVEL_LABEL_CLASSES}>
+                    Departure Time (Optional)
                   </span>
                   <input
                     type="time"
-                    required
                     value={departureTime}
                     onChange={(event) => setDepartureTime(event.target.value)}
+                    className={TRAVEL_FIELD_CLASSES}
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <label className="block">
+                  <span className={TRAVEL_LABEL_CLASSES}>Arrival Date</span>
+                  <input
+                    type="date"
+                    required
+                    value={arrivalDate}
+                    onChange={(event) => setArrivalDate(event.target.value)}
                     className={TRAVEL_FIELD_CLASSES}
                   />
                 </label>
@@ -870,6 +927,21 @@ export default function ExperienceDetailPage() {
               );
               if (entries.length === 0) return null;
 
+              if (group.type === "flight") {
+                entries.sort((a, b) => {
+                  const flightA = a as FlightDetail;
+                  const flightB = b as FlightDetail;
+                  if (flightA.arrivalDate !== flightB.arrivalDate) {
+                    return flightA.arrivalDate < flightB.arrivalDate ? -1 : 1;
+                  }
+                  return flightA.arrivalTime < flightB.arrivalTime
+                    ? -1
+                    : flightA.arrivalTime > flightB.arrivalTime
+                      ? 1
+                      : 0;
+                });
+              }
+
               return (
                 <div key={group.type}>
                   <h3 className="text-sm tracking-wide text-accent uppercase">
@@ -890,6 +962,7 @@ export default function ExperienceDetailPage() {
                             {entry.airline} {entry.flightNumber} —{" "}
                             {entry.departureAirport} to{" "}
                             {entry.arrivalAirport}, arriving{" "}
+                            {formatSingleDate(entry.arrivalDate)} at{" "}
                             {formatTime(entry.arrivalTime)}
                           </p>
                         );
