@@ -187,6 +187,12 @@ function formatSingleDate(dateString: string | undefined) {
   });
 }
 
+function getMapsUrl(location: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    location
+  )}`;
+}
+
 function addOneDay(dateString: string) {
   const date = parseLocalDate(dateString);
   if (!date) return dateString;
@@ -743,9 +749,19 @@ export default function ExperienceDetailPage() {
                       ) : null}
                     </div>
                     {item.location ? (
-                      <p className="text-sm text-foreground/60 sm:text-right">
-                        {item.location}
-                      </p>
+                      <div className="flex flex-col items-start gap-1 sm:items-end">
+                        <p className="text-sm text-foreground/60 sm:text-right">
+                          {item.location}
+                        </p>
+                        <a
+                          href={getMapsUrl(item.location)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Open in Maps
+                        </a>
+                      </div>
                     ) : null}
                   </div>
                 ))}
@@ -1552,6 +1568,14 @@ export default function ExperienceDetailPage() {
                               <p className="mt-1 text-sm text-foreground/60">
                                 {entry.address}
                               </p>
+                              <a
+                                href={getMapsUrl(entry.address)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-1 inline-block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                              >
+                                Open in Maps
+                              </a>
                               <p className="mt-1 text-sm text-foreground/60">
                                 {formatSingleDate(entry.checkInDate)} –{" "}
                                 {formatSingleDate(entry.checkOutDate)}
