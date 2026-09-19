@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -11,6 +11,7 @@ import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
 import {
   addTravelDetail,
   getTravelDetails,
+  updateTravelDetail,
 } from "@/data/travelDetailsStore";
 
 // react-quill-new relies on the browser's `document`, so it can only be
@@ -186,6 +187,17 @@ function formatSingleDate(dateString: string | undefined) {
   });
 }
 
+function addOneDay(dateString: string) {
+  const date = parseLocalDate(dateString);
+  if (!date) return dateString;
+
+  date.setDate(date.getDate() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatTime(time: string | undefined) {
   if (!time) return "";
 
@@ -269,6 +281,13 @@ export default function ExperienceDetailPage() {
   const [pickupTime, setPickupTime] = useState("");
   const [transportNotes, setTransportNotes] = useState("");
   const [travelDetailError, setTravelDetailError] = useState("");
+  const [editingTravelDetailId, setEditingTravelDetailId] = useState<
+    number | null
+  >(null);
+  const [travelDetailEditDraft, setTravelDetailEditDraft] = useState<
+    Record<string, string>
+  >({});
+  const [travelDetailEditError, setTravelDetailEditError] = useState("");
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -328,12 +347,32 @@ export default function ExperienceDetailPage() {
 
   function handleCheckInDateChange(value: string) {
     setCheckInDate(value);
-    if (isCheckOutDateAutoSynced) setCheckOutDate(value);
+
+    if (isCheckOutDateAutoSynced) {
+      const nextCheckOutDate = addOneDay(value);
+      setCheckOutDate(nextCheckOutDate);
+      setTravelDetailError("");
+      return;
+    }
+
+    setTravelDetailError(
+      checkOutDate && checkOutDate < value
+        ? "Check-out date must be on or after the check-in date."
+        : ""
+    );
   }
 
   function handleCheckOutDateChange(value: string) {
     setCheckOutDate(value);
-    if (value !== checkInDate) setIsCheckOutDateAutoSynced(false);
+    // Sync targets checkInDate + 1 day; once the user picks anything
+    // else, respect their manually-chosen stay length going forward.
+    if (value !== addOneDay(checkInDate)) setIsCheckOutDateAutoSynced(false);
+
+    setTravelDetailError(
+      checkInDate && value < checkInDate
+        ? "Check-out date must be on or after the check-in date."
+        : ""
+    );
   }
 
   function handleAddTravelDetail(event: FormEvent<HTMLFormElement>) {
@@ -416,6 +455,81 @@ export default function ExperienceDetailPage() {
     }
 
     setTravelDetails((current) => [...current, newEntry]);
+  }
+
+  function handleStartEditTravelDetail(entry: TravelDetail) {
+    setEditingTravelDetailId(entry.id);
+    setTravelDetailEditError("");
+
+    if (entry.type === "flight") {
+      setTravelDetailEditDraft({
+        guestName: entry.guestName ?? "",
+        airline: entry.airline,
+        flightNumber: entry.flightNumber,
+        departureAirport: entry.departureAirport,
+        arrivalAirport: entry.arrivalAirport,
+        departureDate: entry.departureDate ?? "",
+        departureTime: entry.departureTime ?? "",
+        arrivalDate: entry.arrivalDate,
+        arrivalTime: entry.arrivalTime,
+      });
+    } else if (entry.type === "hotel") {
+      setTravelDetailEditDraft({
+        hotelName: entry.hotelName,
+        address: entry.address,
+        checkInDate: entry.checkInDate,
+        checkOutDate: entry.checkOutDate,
+        confirmationNumber: entry.confirmationNumber ?? "",
+      });
+    } else {
+      setTravelDetailEditDraft({
+        description: entry.description,
+        pickupLocation: entry.pickupLocation,
+        pickupTime: entry.pickupTime,
+        notes: entry.notes ?? "",
+      });
+    }
+  }
+
+  function handleTravelDetailEditDraftChange(field: string, value: string) {
+    setTravelDetailEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditTravelDetail() {
+    setEditingTravelDetailId(null);
+    setTravelDetailEditDraft({});
+    setTravelDetailEditError("");
+  }
+
+  function handleSaveEditTravelDetail(entry: TravelDetail) {
+    const draft = travelDetailEditDraft;
+
+    if (entry.type === "hotel" && draft.checkOutDate < draft.checkInDate) {
+      setTravelDetailEditError(
+        "Check-out date must be on or after the check-in date."
+      );
+      return;
+    }
+
+    if (entry.type === "flight" && draft.departureDate) {
+      const departureDateTime = `${draft.departureDate}T${draft.departureTime || "00:00"}`;
+      const arrivalDateTime = `${draft.arrivalDate}T${draft.arrivalTime}`;
+      if (arrivalDateTime < departureDateTime) {
+        setTravelDetailEditError("Arrival must be on or after departure.");
+        return;
+      }
+    }
+
+    const updatedEntry = updateTravelDetail(entry.id, draft);
+    if (updatedEntry) {
+      setTravelDetails((current) =>
+        current.map((item) => (item.id === entry.id ? updatedEntry : item))
+      );
+    }
+
+    setEditingTravelDetailId(null);
+    setTravelDetailEditDraft({});
+    setTravelDetailEditError("");
   }
 
   useEffect(() => {
@@ -519,9 +633,17 @@ export default function ExperienceDetailPage() {
                       {formatTimeRange(item)}
                     </p>
                     <div>
-                      <p className="font-serif text-lg text-foreground">
-                        {item.title}
-                      </p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="font-serif text-lg text-foreground">
+                          {item.title}
+                        </p>
+                        <Link
+                          href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
+                          className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Edit
+                        </Link>
+                      </div>
                       {item.description ? (
                         <p className="mt-1 text-sm text-foreground/60">
                           {item.description}
@@ -994,59 +1116,378 @@ export default function ExperienceDetailPage() {
                   </h3>
                   <div className="mt-4 flex flex-col gap-4 border-t border-foreground/10 pt-4">
                     {entries.map((entry) => {
+                      if (editingTravelDetailId === entry.id) {
+                        const draft = travelDetailEditDraft;
+                        const field = (key: string) => draft[key] ?? "";
+                        const onField =
+                          (key: string) =>
+                          (
+                            event: ChangeEvent<
+                              HTMLInputElement | HTMLTextAreaElement
+                            >
+                          ) =>
+                            handleTravelDetailEditDraftChange(
+                              key,
+                              event.target.value
+                            );
+
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex flex-col gap-6 border border-foreground/10 p-4"
+                          >
+                            {entry.type === "flight" ? (
+                              <>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Guest Name (Optional)
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={field("guestName")}
+                                    onChange={onField("guestName")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Airline
+                                    </span>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={field("airline")}
+                                      onChange={onField("airline")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Flight Number
+                                    </span>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={field("flightNumber")}
+                                      onChange={onField("flightNumber")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Departure Airport
+                                    </span>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={field("departureAirport")}
+                                      onChange={onField("departureAirport")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Arrival Airport
+                                    </span>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={field("arrivalAirport")}
+                                      onChange={onField("arrivalAirport")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Departure Date (Optional)
+                                    </span>
+                                    <input
+                                      type="date"
+                                      value={field("departureDate")}
+                                      onChange={onField("departureDate")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Departure Time (Optional)
+                                    </span>
+                                    <input
+                                      type="time"
+                                      value={field("departureTime")}
+                                      onChange={onField("departureTime")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Arrival Date
+                                    </span>
+                                    <input
+                                      type="date"
+                                      required
+                                      value={field("arrivalDate")}
+                                      onChange={onField("arrivalDate")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Arrival Time
+                                    </span>
+                                    <input
+                                      type="time"
+                                      required
+                                      value={field("arrivalTime")}
+                                      onChange={onField("arrivalTime")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                              </>
+                            ) : null}
+
+                            {entry.type === "hotel" ? (
+                              <>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Hotel Name
+                                  </span>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={field("hotelName")}
+                                    onChange={onField("hotelName")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Address
+                                  </span>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={field("address")}
+                                    onChange={onField("address")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Check-In Date
+                                    </span>
+                                    <input
+                                      type="date"
+                                      required
+                                      value={field("checkInDate")}
+                                      onChange={onField("checkInDate")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Check-Out Date
+                                    </span>
+                                    <input
+                                      type="date"
+                                      required
+                                      value={field("checkOutDate")}
+                                      onChange={onField("checkOutDate")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Confirmation Number (Optional)
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={field("confirmationNumber")}
+                                    onChange={onField("confirmationNumber")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                              </>
+                            ) : null}
+
+                            {entry.type === "transport" ? (
+                              <>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Description
+                                  </span>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={field("description")}
+                                    onChange={onField("description")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Pickup Location
+                                    </span>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={field("pickupLocation")}
+                                      onChange={onField("pickupLocation")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className={TRAVEL_LABEL_CLASSES}>
+                                      Pickup Time
+                                    </span>
+                                    <input
+                                      type="time"
+                                      required
+                                      value={field("pickupTime")}
+                                      onChange={onField("pickupTime")}
+                                      className={TRAVEL_FIELD_CLASSES}
+                                    />
+                                  </label>
+                                </div>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Notes (Optional)
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={field("notes")}
+                                    onChange={onField("notes")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
+                              </>
+                            ) : null}
+
+                            {travelDetailEditError ? (
+                              <p className="text-sm text-red-600">
+                                {travelDetailEditError}
+                              </p>
+                            ) : null}
+
+                            <div className="flex gap-4">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSaveEditTravelDetail(entry)
+                                }
+                                className="border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditTravelDetail}
+                                className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
                       if (entry.type === "flight") {
                         const prefix = entry.guestName
                           ? `${entry.guestName}'s flight: `
                           : "";
                         return (
-                          <p
+                          <div
                             key={entry.id}
-                            className="font-serif text-lg text-foreground"
+                            className="flex items-start justify-between gap-4"
                           >
-                            {prefix}
-                            {entry.airline} {entry.flightNumber} —{" "}
-                            {entry.departureAirport} to{" "}
-                            {entry.arrivalAirport}, arriving{" "}
-                            {formatSingleDate(entry.arrivalDate)} at{" "}
-                            {formatTime(entry.arrivalTime)}
-                          </p>
+                            <p className="font-serif text-lg text-foreground">
+                              {prefix}
+                              {entry.airline} {entry.flightNumber} —{" "}
+                              {entry.departureAirport} to{" "}
+                              {entry.arrivalAirport}, arriving{" "}
+                              {formatSingleDate(entry.arrivalDate)} at{" "}
+                              {formatTime(entry.arrivalTime)}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditTravelDetail(entry)}
+                              className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         );
                       }
 
                       if (entry.type === "hotel") {
                         return (
-                          <div key={entry.id}>
-                            <p className="font-serif text-lg text-foreground">
-                              {entry.hotelName}
-                            </p>
-                            <p className="mt-1 text-sm text-foreground/60">
-                              {entry.address}
-                            </p>
-                            <p className="mt-1 text-sm text-foreground/60">
-                              {formatSingleDate(entry.checkInDate)} –{" "}
-                              {formatSingleDate(entry.checkOutDate)}
-                              {entry.confirmationNumber
-                                ? ` · Confirmation: ${entry.confirmationNumber}`
-                                : ""}
-                            </p>
+                          <div
+                            key={entry.id}
+                            className="flex items-start justify-between gap-4"
+                          >
+                            <div>
+                              <p className="font-serif text-lg text-foreground">
+                                {entry.hotelName}
+                              </p>
+                              <p className="mt-1 text-sm text-foreground/60">
+                                {entry.address}
+                              </p>
+                              <p className="mt-1 text-sm text-foreground/60">
+                                {formatSingleDate(entry.checkInDate)} –{" "}
+                                {formatSingleDate(entry.checkOutDate)}
+                                {entry.confirmationNumber
+                                  ? ` · Confirmation: ${entry.confirmationNumber}`
+                                  : ""}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditTravelDetail(entry)}
+                              className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              Edit
+                            </button>
                           </div>
                         );
                       }
 
                       return (
-                        <div key={entry.id}>
-                          <p className="font-serif text-lg text-foreground">
-                            {entry.description}
-                          </p>
-                          <p className="mt-1 text-sm text-foreground/60">
-                            {entry.pickupLocation} ·{" "}
-                            {formatTime(entry.pickupTime)}
-                          </p>
-                          {entry.notes ? (
-                            <p className="mt-1 text-sm text-foreground/60">
-                              {entry.notes}
+                        <div
+                          key={entry.id}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <div>
+                            <p className="font-serif text-lg text-foreground">
+                              {entry.description}
                             </p>
-                          ) : null}
+                            <p className="mt-1 text-sm text-foreground/60">
+                              {entry.pickupLocation} ·{" "}
+                              {formatTime(entry.pickupTime)}
+                            </p>
+                            {entry.notes ? (
+                              <p className="mt-1 text-sm text-foreground/60">
+                                {entry.notes}
+                              </p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditTravelDetail(entry)}
+                            className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Edit
+                          </button>
                         </div>
                       );
                     })}

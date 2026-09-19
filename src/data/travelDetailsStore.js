@@ -48,3 +48,17 @@ export function addTravelDetail(entry) {
   writeToStorage(updatedEntries);
   return newEntry;
 }
+
+export function updateTravelDetail(id, fields) {
+  const entries = getAllTravelDetails();
+  let updatedEntry = null;
+
+  const updatedEntries = entries.map((entry) => {
+    if (entry.id !== id) return entry;
+    updatedEntry = { ...entry, ...fields };
+    return updatedEntry;
+  });
+
+  writeToStorage(updatedEntries);
+  return updatedEntry;
+}

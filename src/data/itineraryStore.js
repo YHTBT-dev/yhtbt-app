@@ -50,3 +50,17 @@ export function addItineraryItem(item) {
   writeToStorage(updatedItems);
   return newItem;
 }
+
+export function updateItineraryItem(id, fields) {
+  const items = getAllItineraryItems();
+  let updatedItem = null;
+
+  const updatedItems = items.map((item) => {
+    if (item.id !== id) return item;
+    updatedItem = { ...item, ...fields };
+    return updatedItem;
+  });
+
+  writeToStorage(updatedItems);
+  return updatedItem;
+}
