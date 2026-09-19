@@ -19,6 +19,20 @@ export default function NewExperiencePage() {
   const [isHosting, setIsHosting] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
   const [error, setError] = useState("");
+  // Tracks whether endDate should keep following startDate. Stays true
+  // until the user manually sets endDate to something other than
+  // startDate, at which point their multi-day choice is respected.
+  const [isEndDateAutoSynced, setIsEndDateAutoSynced] = useState(true);
+
+  function handleStartDateChange(value: string) {
+    setStartDate(value);
+    if (isEndDateAutoSynced) setEndDate(value);
+  }
+
+  function handleEndDateChange(value: string) {
+    setEndDate(value);
+    if (value !== startDate) setIsEndDateAutoSynced(false);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,7 +104,7 @@ export default function NewExperiencePage() {
               type="date"
               required
               value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
+              onChange={(event) => handleStartDateChange(event.target.value)}
               className={FIELD_CLASSES}
             />
           </label>
@@ -101,7 +115,7 @@ export default function NewExperiencePage() {
               type="date"
               required
               value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
+              onChange={(event) => handleEndDateChange(event.target.value)}
               className={FIELD_CLASSES}
             />
           </label>
