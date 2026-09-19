@@ -16,7 +16,7 @@ type Experience = {
   startDate: string;
   endDate: string;
   location?: string;
-  role: string;
+  roles: string[];
 };
 
 export default function EditExperiencePage() {
@@ -30,6 +30,8 @@ export default function EditExperiencePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
+  const [isHosting, setIsHosting] = useState(false);
+  const [isAttending, setIsAttending] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -45,11 +47,18 @@ export default function EditExperiencePage() {
       setStartDate(found.startDate);
       setEndDate(found.endDate);
       setLocation(found.location ?? "");
+      setIsHosting(found.roles.includes("hosted"));
+      setIsAttending(found.roles.includes("attended"));
     }
   }, [params.id]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!isHosting && !isAttending) {
+      setError("Select at least one: hosting or attending.");
+      return;
+    }
 
     if (endDate < startDate) {
       setError("End date must be on or after the start date.");
@@ -58,12 +67,18 @@ export default function EditExperiencePage() {
 
     setError("");
 
+    const roles = [
+      ...(isHosting ? ["hosted"] : []),
+      ...(isAttending ? ["attended"] : []),
+    ];
+
     updateExperience(Number(params.id), {
       name,
       coverImage,
       startDate,
       endDate,
       location,
+      roles,
     });
 
     router.push(`/experiences/${params.id}`);
@@ -149,6 +164,32 @@ export default function EditExperiencePage() {
             className={FIELD_CLASSES}
           />
         </label>
+
+        <div className="flex flex-col gap-3">
+          <span className={LABEL_CLASSES}>Your Role</span>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={isHosting}
+              onChange={(event) => setIsHosting(event.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            <span className="font-serif text-lg text-foreground">
+              I&apos;m hosting this Experience
+            </span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={isAttending}
+              onChange={(event) => setIsAttending(event.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            <span className="font-serif text-lg text-foreground">
+              I&apos;m also attending
+            </span>
+          </label>
+        </div>
 
         {error ? (
           <p className="text-sm text-red-600">{error}</p>

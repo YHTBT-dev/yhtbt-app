@@ -26,7 +26,7 @@ type Experience = {
   startDate: string;
   endDate: string;
   location?: string;
-  role: string;
+  roles: string[];
 };
 
 type ItineraryItem = {

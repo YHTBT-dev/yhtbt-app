@@ -20,14 +20,25 @@ function writeToStorage(experiences) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(experiences));
 }
 
+// Older records may still have a single "role" string instead of a
+// "roles" array; treat those as roles: [role] instead of crashing.
+export function normalizeExperience(experience) {
+  if (Array.isArray(experience.roles)) return experience;
+
+  const { role, ...rest } = experience;
+  return { ...rest, roles: role ? [role] : [] };
+}
+
 export function getExperiences() {
-  if (typeof window === "undefined") return mockExperiences;
+  if (typeof window === "undefined") {
+    return mockExperiences.map(normalizeExperience);
+  }
 
   const stored = readFromStorage();
-  if (stored) return stored;
+  if (stored) return stored.map(normalizeExperience);
 
   writeToStorage(mockExperiences);
-  return mockExperiences;
+  return mockExperiences.map(normalizeExperience);
 }
 
 export function addExperience(experience) {

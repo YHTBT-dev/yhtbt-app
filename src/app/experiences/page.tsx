@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import mockExperiences from "@/data/mockExperiences";
-import { getExperiences } from "@/data/experiencesStore";
+import { getExperiences, normalizeExperience } from "@/data/experiencesStore";
 
 type Role = "hosted" | "attended";
 
@@ -41,7 +41,9 @@ function formatDateRange(startDate: string, endDate: string) {
 
 export default function ExperiencesPage() {
   const [activeTab, setActiveTab] = useState<Role>("hosted");
-  const [experiences, setExperiences] = useState(mockExperiences);
+  const [experiences, setExperiences] = useState(() =>
+    mockExperiences.map(normalizeExperience)
+  );
 
   useEffect(() => {
     setExperiences(getExperiences());
@@ -50,7 +52,7 @@ export default function ExperiencesPage() {
   const filteredExperiences = useMemo(
     () =>
       experiences
-        .filter((experience) => experience.role === activeTab)
+        .filter((experience) => experience.roles.includes(activeTab))
         .sort(
           (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
         ),
