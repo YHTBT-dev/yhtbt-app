@@ -241,6 +241,52 @@ function groupByDate(items: ItineraryItem[]) {
   return groups;
 }
 
+function collapsedSectionsStorageKey(experienceId: string) {
+  return `yhtbt:collapsedSections:${experienceId}`;
+}
+
+function loadCollapsedSections(experienceId: string): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+
+  const raw = window.localStorage.getItem(
+    collapsedSectionsStorageKey(experienceId)
+  );
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function saveCollapsedSections(
+  experienceId: string,
+  collapsedSections: Record<string, boolean>
+) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    collapsedSectionsStorageKey(experienceId),
+    JSON.stringify(collapsedSections)
+  );
+}
+
+function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+        collapsed ? "-rotate-90" : ""
+      }`}
+    >
+      <path d="M5 7.5l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function ExperienceDetailPage() {
   const params = useParams<{ id: string }>();
   const [experience, setExperience] = useState<Experience | null | undefined>(
@@ -291,6 +337,9 @@ export default function ExperienceDetailPage() {
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<
+    Record<string, boolean>
+  >({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -316,7 +365,16 @@ export default function ExperienceDetailPage() {
     setGuests(getGuests(params.id));
     setTravelDetails(getTravelDetails(params.id));
     setNote(getNote(params.id));
+    setCollapsedSections(loadCollapsedSections(params.id));
   }, [params.id]);
+
+  function toggleSection(section: string) {
+    setCollapsedSections((current) => {
+      const next = { ...current, [section]: !current[section] };
+      saveCollapsedSections(params.id, next);
+      return next;
+    });
+  }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -603,7 +661,16 @@ export default function ExperienceDetailPage() {
       </div>
 
       <div className="mt-12 flex items-center justify-between gap-4">
-        <h2 className="font-serif text-2xl text-foreground">Itinerary</h2>
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("itinerary")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.itinerary} />
+            Itinerary
+          </button>
+        </h2>
         <Link
           href={`/experiences/${params.id}/itinerary/new`}
           className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
@@ -612,7 +679,7 @@ export default function ExperienceDetailPage() {
         </Link>
       </div>
 
-      {groupedItinerary.length === 0 ? (
+      {collapsedSections.itinerary ? null : groupedItinerary.length === 0 ? (
         <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
           No itinerary yet
         </div>
@@ -669,8 +736,19 @@ export default function ExperienceDetailPage() {
       )}
 
       <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">Guests</h2>
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("guests")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.guests} />
+            Guests
+          </button>
+        </h2>
 
+        {collapsedSections.guests ? null : (
+        <>
         <form
           onSubmit={handleAddGuest}
           className="mt-6 grid grid-cols-1 items-end gap-6 sm:grid-cols-[1fr_1fr_auto]"
@@ -778,13 +856,24 @@ export default function ExperienceDetailPage() {
             </div>
           );
         })()}
+        </>
+        )}
       </div>
 
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
-          Travel Details
+          <button
+            type="button"
+            onClick={() => toggleSection("travelDetails")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.travelDetails} />
+            Travel Details
+          </button>
         </h2>
 
+        {collapsedSections.travelDetails ? null : (
+        <>
         <form
           onSubmit={handleAddTravelDetail}
           className="mt-6 flex flex-col gap-6"
@@ -1497,10 +1586,21 @@ export default function ExperienceDetailPage() {
             })}
           </div>
         )}
+        </>
+        )}
       </div>
 
       <div className="mt-12 flex items-center justify-between gap-4">
-        <h2 className="font-serif text-2xl text-foreground">Notes to Self</h2>
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("notes")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.notes} />
+            Notes to Self
+          </button>
+        </h2>
         <span
           className={`text-xs tracking-wide text-accent uppercase transition-opacity ${
             showSaved ? "opacity-100" : "opacity-0"
@@ -1509,21 +1609,26 @@ export default function ExperienceDetailPage() {
           Saved
         </span>
       </div>
-      <p className="mt-1 text-sm text-foreground/50 italic">
-        Jot down your private notes from this Experience so you can revisit
-        them later
-      </p>
 
-      <div className="note-editor mt-4">
-        <ReactQuill
-          theme="snow"
-          value={note}
-          onChange={(value) => handleNoteChange(value)}
-          modules={NOTE_TOOLBAR_MODULES}
-          formats={NOTE_FORMATS}
-          placeholder="Jot down private notes about this experience..."
-        />
-      </div>
+      {collapsedSections.notes ? null : (
+        <>
+          <p className="mt-1 text-sm text-foreground/50 italic">
+            Jot down your private notes from this Experience so you can
+            revisit them later
+          </p>
+
+          <div className="note-editor mt-4">
+            <ReactQuill
+              theme="snow"
+              value={note}
+              onChange={(value) => handleNoteChange(value)}
+              modules={NOTE_TOOLBAR_MODULES}
+              formats={NOTE_FORMATS}
+              placeholder="Jot down private notes about this experience..."
+            />
+          </div>
+        </>
+      )}
     </main>
   );
 }
