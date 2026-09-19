@@ -13,6 +13,7 @@ import {
   getTravelDetails,
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
+import { addUpdate, getUpdates } from "@/data/updatesStore";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -80,6 +81,13 @@ type Guest = {
   name: string;
   email: string;
   rsvpStatus: "invited" | "confirmed" | "declined";
+};
+
+type Update = {
+  id: number;
+  experienceId: string;
+  message: string;
+  timestamp: string;
 };
 
 type FlightDetail = {
@@ -185,6 +193,30 @@ function formatSingleDate(dateString: string | undefined) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 60 * 60 * 24 * 365],
+  ["month", 60 * 60 * 24 * 30],
+  ["week", 60 * 60 * 24 * 7],
+  ["day", 60 * 60 * 24],
+  ["hour", 60 * 60],
+  ["minute", 60],
+];
+
+function formatRelativeTime(timestamp: string) {
+  const diffSeconds = Math.round(
+    (Date.now() - new Date(timestamp).getTime()) / 1000
+  );
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+  for (const [unit, secondsInUnit] of RELATIVE_TIME_UNITS) {
+    if (Math.abs(diffSeconds) >= secondsInUnit) {
+      return rtf.format(-Math.round(diffSeconds / secondsInUnit), unit);
+    }
+  }
+
+  return rtf.format(-diffSeconds, "second");
 }
 
 function getMapsUrl(location: string) {
@@ -344,6 +376,8 @@ export default function ExperienceDetailPage() {
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [coverImageError, setCoverImageError] = useState(false);
+  const [updates, setUpdates] = useState<Update[]>([]);
+  const [updateMessage, setUpdateMessage] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
@@ -374,6 +408,7 @@ export default function ExperienceDetailPage() {
     setTravelDetails(getTravelDetails(params.id));
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
+    setUpdates(getUpdates(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -382,6 +417,18 @@ export default function ExperienceDetailPage() {
       saveCollapsedSections(params.id, next);
       return next;
     });
+  }
+
+  function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const newUpdate = addUpdate({
+      experienceId: params.id,
+      message: updateMessage,
+    });
+
+    setUpdates((current) => [newUpdate, ...current]);
+    setUpdateMessage("");
   }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -686,7 +733,7 @@ export default function ExperienceDetailPage() {
         </p>
       </div>
 
-      <div className="mt-12 flex items-center justify-between gap-4">
+      <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
           <button
             type="button"
@@ -697,15 +744,20 @@ export default function ExperienceDetailPage() {
             Itinerary
           </button>
         </h2>
-        <Link
-          href={`/experiences/${params.id}/itinerary/new`}
-          className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-        >
-          Add Itinerary Item
-        </Link>
       </div>
 
-      {collapsedSections.itinerary ? null : groupedItinerary.length === 0 ? (
+      {collapsedSections.itinerary ? null : (
+        <>
+          <div className="mt-6 flex justify-end">
+            <Link
+              href={`/experiences/${params.id}/itinerary/new`}
+              className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+            >
+              Add Itinerary Item
+            </Link>
+          </div>
+
+          {groupedItinerary.length === 0 ? (
         <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
           No itinerary yet
         </div>
@@ -770,6 +822,73 @@ export default function ExperienceDetailPage() {
           ))}
         </div>
       )}
+        </>
+      )}
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("updates")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.updates} />
+            Updates
+          </button>
+        </h2>
+
+        {collapsedSections.updates ? null : (
+          <>
+            <form
+              onSubmit={handleAddUpdate}
+              className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end"
+            >
+              <label className="block flex-1">
+                <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  New Update
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={updateMessage}
+                  onChange={(event) => setUpdateMessage(event.target.value)}
+                  placeholder="The dinner start time moved to 7pm..."
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="shrink-0 border border-accent px-6 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Post
+              </button>
+            </form>
+
+            {updates.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+                No updates yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {updates.map((update) => (
+                  <div
+                    key={update.id}
+                    className="border-b border-foreground/10 pb-8 last:border-b-0"
+                  >
+                    <p className="font-serif text-lg text-foreground">
+                      {update.message}
+                    </p>
+                    <p className="mt-1 text-sm text-foreground/60">
+                      {formatRelativeTime(update.timestamp)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
