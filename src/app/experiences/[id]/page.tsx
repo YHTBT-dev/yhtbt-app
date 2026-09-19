@@ -15,6 +15,7 @@ import {
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
 import { addFaq, getFaqs } from "@/data/faqsStore";
+import Modal from "@/components/Modal";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -130,6 +131,7 @@ type TransportDetail = {
   type: "transport";
   description: string;
   pickupLocation: string;
+  pickupDate: string;
   pickupTime: string;
   notes?: string;
 };
@@ -370,6 +372,7 @@ export default function ExperienceDetailPage() {
   // Transport fields
   const [transportDescription, setTransportDescription] = useState("");
   const [pickupLocation, setPickupLocation] = useState("");
+  const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [transportNotes, setTransportNotes] = useState("");
   const [travelDetailError, setTravelDetailError] = useState("");
@@ -389,6 +392,10 @@ export default function ExperienceDetailPage() {
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
+    useState(false);
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
@@ -455,6 +462,13 @@ export default function ExperienceDetailPage() {
     setFaqs((current) => [...current, newFaq]);
     setFaqQuestion("");
     setFaqAnswer("");
+    setIsFaqModalOpen(false);
+  }
+
+  function handleCloseFaqModal() {
+    setIsFaqModalOpen(false);
+    setFaqQuestion("");
+    setFaqAnswer("");
   }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -468,6 +482,13 @@ export default function ExperienceDetailPage() {
     });
 
     setGuests((current) => [...current, newGuest]);
+    setGuestName("");
+    setGuestEmail("");
+    setIsGuestModalOpen(false);
+  }
+
+  function handleCloseGuestModal() {
+    setIsGuestModalOpen(false);
     setGuestName("");
     setGuestEmail("");
   }
@@ -584,16 +605,44 @@ export default function ExperienceDetailPage() {
         type: "transport",
         description: transportDescription,
         pickupLocation,
+        pickupDate,
         pickupTime,
         notes: transportNotes,
       });
       setTransportDescription("");
       setPickupLocation("");
+      setPickupDate("");
       setPickupTime("");
       setTransportNotes("");
     }
 
     setTravelDetails((current) => [...current, newEntry]);
+    setIsTravelDetailModalOpen(false);
+  }
+
+  function handleCloseTravelDetailModal() {
+    setIsTravelDetailModalOpen(false);
+    setFlightGuestName("");
+    setAirline("");
+    setFlightNumber("");
+    setDepartureAirport("");
+    setArrivalAirport("");
+    setDepartureDate("");
+    setDepartureTime("");
+    setArrivalDate("");
+    setArrivalTime("");
+    setHotelName("");
+    setHotelAddress("");
+    setCheckInDate("");
+    setCheckOutDate("");
+    setIsCheckOutDateAutoSynced(true);
+    setConfirmationNumber("");
+    setTransportDescription("");
+    setPickupLocation("");
+    setPickupDate("");
+    setPickupTime("");
+    setTransportNotes("");
+    setTravelDetailError("");
   }
 
   function handleStartEditTravelDetail(entry: TravelDetail) {
@@ -624,6 +673,7 @@ export default function ExperienceDetailPage() {
       setTravelDetailEditDraft({
         description: entry.description,
         pickupLocation: entry.pickupLocation,
+        pickupDate: entry.pickupDate,
         pickupTime: entry.pickupTime,
         notes: entry.notes ?? "",
       });
@@ -930,44 +980,60 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.faqs ? null : (
           <>
-            <form
-              onSubmit={handleAddFaq}
-              className="mt-6 flex flex-col gap-6"
-            >
-              <label className="block">
-                <span className="text-sm tracking-wide text-foreground/50 uppercase">
-                  Question
-                </span>
-                <input
-                  type="text"
-                  required
-                  value={faqQuestion}
-                  onChange={(event) => setFaqQuestion(event.target.value)}
-                  placeholder="Is there parking on site?"
-                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm tracking-wide text-foreground/50 uppercase">
-                  Answer
-                </span>
-                <textarea
-                  required
-                  rows={3}
-                  value={faqAnswer}
-                  onChange={(event) => setFaqAnswer(event.target.value)}
-                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
-                />
-              </label>
-
+            <div className="mt-6 flex justify-end">
               <button
-                type="submit"
-                className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                type="button"
+                onClick={() => setIsFaqModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
               >
                 Add FAQ
               </button>
-            </form>
+            </div>
+
+            <Modal
+              isOpen={isFaqModalOpen}
+              onClose={handleCloseFaqModal}
+              title="Add FAQ"
+            >
+              <form
+                onSubmit={handleAddFaq}
+                className="flex flex-col gap-6"
+              >
+                <label className="block">
+                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={faqQuestion}
+                    onChange={(event) => setFaqQuestion(event.target.value)}
+                    placeholder="Is there parking on site?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                    Answer
+                  </span>
+                  <textarea
+                    required
+                    rows={3}
+                    value={faqAnswer}
+                    onChange={(event) => setFaqAnswer(event.target.value)}
+                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add FAQ
+                </button>
+              </form>
+            </Modal>
 
             {faqs.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
@@ -1008,45 +1074,61 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.guests ? null : (
         <>
-        <form
-          onSubmit={handleAddGuest}
-          className="mt-6 grid grid-cols-1 items-end gap-6 sm:grid-cols-[1fr_1fr_auto]"
-        >
-          <label className="block">
-            <span className="text-sm tracking-wide text-foreground/50 uppercase">
-              Name
-            </span>
-            <input
-              type="text"
-              required
-              value={guestName}
-              onChange={(event) => setGuestName(event.target.value)}
-              placeholder="Jamie Rivera"
-              className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm tracking-wide text-foreground/50 uppercase">
-              Email
-            </span>
-            <input
-              type="email"
-              required
-              value={guestEmail}
-              onChange={(event) => setGuestEmail(event.target.value)}
-              placeholder="jamie@example.com"
-              className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
-            />
-          </label>
-
+        <div className="mt-6 flex justify-end">
           <button
-            type="submit"
+            type="button"
+            onClick={() => setIsGuestModalOpen(true)}
             className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
           >
             Add Guest
           </button>
-        </form>
+        </div>
+
+        <Modal
+          isOpen={isGuestModalOpen}
+          onClose={handleCloseGuestModal}
+          title="Add Guest"
+        >
+          <form
+            onSubmit={handleAddGuest}
+            className="flex flex-col gap-6"
+          >
+            <label className="block">
+              <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                Name
+              </span>
+              <input
+                type="text"
+                required
+                value={guestName}
+                onChange={(event) => setGuestName(event.target.value)}
+                placeholder="Jamie Rivera"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                Email
+              </span>
+              <input
+                type="email"
+                required
+                value={guestEmail}
+                onChange={(event) => setGuestEmail(event.target.value)}
+                placeholder="jamie@example.com"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+            >
+              Add Guest
+            </button>
+          </form>
+        </Modal>
 
         <div className="mt-8 flex gap-8 border-b border-foreground/10">
           {GUEST_TABS.map((tab) => {
@@ -1133,9 +1215,24 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.travelDetails ? null : (
         <>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setIsTravelDetailModalOpen(true)}
+            className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          >
+            Add Travel Detail
+          </button>
+        </div>
+
+        <Modal
+          isOpen={isTravelDetailModalOpen}
+          onClose={handleCloseTravelDetailModal}
+          title="Add Travel Detail"
+        >
         <form
           onSubmit={handleAddTravelDetail}
-          className="mt-6 flex flex-col gap-6"
+          className="flex flex-col gap-6"
         >
           <label className="block">
             <span className={TRAVEL_LABEL_CLASSES}>Type</span>
@@ -1374,19 +1471,30 @@ export default function ExperienceDetailPage() {
                 />
               </label>
 
+              <label className="block">
+                <span className={TRAVEL_LABEL_CLASSES}>
+                  Pickup Location
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={pickupLocation}
+                  onChange={(event) =>
+                    setPickupLocation(event.target.value)
+                  }
+                  placeholder="Hotel lobby"
+                  className={TRAVEL_FIELD_CLASSES}
+                />
+              </label>
+
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <label className="block">
-                  <span className={TRAVEL_LABEL_CLASSES}>
-                    Pickup Location
-                  </span>
+                  <span className={TRAVEL_LABEL_CLASSES}>Pickup Date</span>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={pickupLocation}
-                    onChange={(event) =>
-                      setPickupLocation(event.target.value)
-                    }
-                    placeholder="Hotel lobby"
+                    value={pickupDate}
+                    onChange={(event) => setPickupDate(event.target.value)}
                     className={TRAVEL_FIELD_CLASSES}
                   />
                 </label>
@@ -1429,6 +1537,7 @@ export default function ExperienceDetailPage() {
             Add Travel Detail
           </button>
         </form>
+        </Modal>
 
         {travelDetails.length === 0 ? (
           <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
@@ -1452,6 +1561,23 @@ export default function ExperienceDetailPage() {
                   return flightA.arrivalTime < flightB.arrivalTime
                     ? -1
                     : flightA.arrivalTime > flightB.arrivalTime
+                      ? 1
+                      : 0;
+                });
+              }
+
+              if (group.type === "transport") {
+                entries.sort((a, b) => {
+                  const transportA = a as TransportDetail;
+                  const transportB = b as TransportDetail;
+                  if (transportA.pickupDate !== transportB.pickupDate) {
+                    return transportA.pickupDate < transportB.pickupDate
+                      ? -1
+                      : 1;
+                  }
+                  return transportA.pickupTime < transportB.pickupTime
+                    ? -1
+                    : transportA.pickupTime > transportB.pickupTime
                       ? 1
                       : 0;
                 });
@@ -1682,16 +1808,28 @@ export default function ExperienceDetailPage() {
                                     className={TRAVEL_FIELD_CLASSES}
                                   />
                                 </label>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Pickup Location
+                                  </span>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={field("pickupLocation")}
+                                    onChange={onField("pickupLocation")}
+                                    className={TRAVEL_FIELD_CLASSES}
+                                  />
+                                </label>
                                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                   <label className="block">
                                     <span className={TRAVEL_LABEL_CLASSES}>
-                                      Pickup Location
+                                      Pickup Date
                                     </span>
                                     <input
-                                      type="text"
+                                      type="date"
                                       required
-                                      value={field("pickupLocation")}
-                                      onChange={onField("pickupLocation")}
+                                      value={field("pickupDate")}
+                                      onChange={onField("pickupDate")}
                                       className={TRAVEL_FIELD_CLASSES}
                                     />
                                   </label>
@@ -1829,6 +1967,7 @@ export default function ExperienceDetailPage() {
                             </p>
                             <p className="mt-1 text-sm text-foreground/60">
                               {entry.pickupLocation} ·{" "}
+                              {formatSingleDate(entry.pickupDate)} at{" "}
                               {formatTime(entry.pickupTime)}
                             </p>
                             {entry.notes ? (

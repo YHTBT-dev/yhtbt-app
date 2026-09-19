@@ -7,7 +7,7 @@ const STORAGE_KEY = "yhtbt:travelDetails";
 // - hotel: { id, experienceId, type: "hotel", hotelName, address,
 //   checkInDate, checkOutDate, confirmationNumber? }
 // - transport: { id, experienceId, type: "transport", description,
-//   pickupLocation, pickupTime, notes? }
+//   pickupLocation, pickupDate, pickupTime, notes? }
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
