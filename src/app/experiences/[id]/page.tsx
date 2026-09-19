@@ -337,6 +337,7 @@ export default function ExperienceDetailPage() {
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [coverImageError, setCoverImageError] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
@@ -361,6 +362,7 @@ export default function ExperienceDetailPage() {
       (item: Experience) => String(item.id) === params.id
     );
     setExperience(found ?? null);
+    setCoverImageError(false);
     setItineraryItems(getItineraryItems(params.id));
     setGuests(getGuests(params.id));
     setTravelDetails(getTravelDetails(params.id));
@@ -631,7 +633,25 @@ export default function ExperienceDetailPage() {
   const groupedItinerary = groupByDate(itineraryItems);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
+    <>
+      <div className="relative h-64 w-full overflow-hidden sm:h-80">
+        {experience.coverImage && !coverImageError ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={experience.coverImage}
+              alt={experience.name}
+              onError={() => setCoverImageError(true)}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+          </>
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-accent/15 via-background to-accent/5" />
+        )}
+      </div>
+
+      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
       <div
         className={`sticky top-0 z-10 bg-background pb-4 transition-shadow duration-200 ${
           isScrolled
@@ -1629,6 +1649,7 @@ export default function ExperienceDetailPage() {
           </div>
         </>
       )}
-    </main>
+      </main>
+    </>
   );
 }
