@@ -257,12 +257,18 @@ export default function ExperienceDetailPage() {
   const [hotelAddress, setHotelAddress] = useState("");
   const [checkInDate, setCheckInDate] = useState("");
   const [checkOutDate, setCheckOutDate] = useState("");
+  // Tracks whether checkOutDate should keep following checkInDate. Stays
+  // true until the user manually sets checkOutDate to something other
+  // than checkInDate, at which point their multi-night stay is respected.
+  const [isCheckOutDateAutoSynced, setIsCheckOutDateAutoSynced] =
+    useState(true);
   const [confirmationNumber, setConfirmationNumber] = useState("");
   // Transport fields
   const [transportDescription, setTransportDescription] = useState("");
   const [pickupLocation, setPickupLocation] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [transportNotes, setTransportNotes] = useState("");
+  const [travelDetailError, setTravelDetailError] = useState("");
   const [note, setNote] = useState("");
   const [showSaved, setShowSaved] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -320,8 +326,38 @@ export default function ExperienceDetailPage() {
     );
   }
 
+  function handleCheckInDateChange(value: string) {
+    setCheckInDate(value);
+    if (isCheckOutDateAutoSynced) setCheckOutDate(value);
+  }
+
+  function handleCheckOutDateChange(value: string) {
+    setCheckOutDate(value);
+    if (value !== checkInDate) setIsCheckOutDateAutoSynced(false);
+  }
+
   function handleAddTravelDetail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (travelDetailType === "flight" && departureDate) {
+      const departureDateTime = `${departureDate}T${departureTime || "00:00"}`;
+      const arrivalDateTime = `${arrivalDate}T${arrivalTime}`;
+      if (arrivalDateTime < departureDateTime) {
+        setTravelDetailError(
+          "Arrival must be on or after departure."
+        );
+        return;
+      }
+    }
+
+    if (travelDetailType === "hotel" && checkOutDate < checkInDate) {
+      setTravelDetailError(
+        "Check-out date must be on or after the check-in date."
+      );
+      return;
+    }
+
+    setTravelDetailError("");
 
     let newEntry: TravelDetail;
 
@@ -362,6 +398,7 @@ export default function ExperienceDetailPage() {
       setHotelAddress("");
       setCheckInDate("");
       setCheckOutDate("");
+      setIsCheckOutDateAutoSynced(true);
       setConfirmationNumber("");
     } else {
       newEntry = addTravelDetail({
@@ -813,7 +850,9 @@ export default function ExperienceDetailPage() {
                     type="date"
                     required
                     value={checkInDate}
-                    onChange={(event) => setCheckInDate(event.target.value)}
+                    onChange={(event) =>
+                      handleCheckInDateChange(event.target.value)
+                    }
                     className={TRAVEL_FIELD_CLASSES}
                   />
                 </label>
@@ -824,7 +863,9 @@ export default function ExperienceDetailPage() {
                     type="date"
                     required
                     value={checkOutDate}
-                    onChange={(event) => setCheckOutDate(event.target.value)}
+                    onChange={(event) =>
+                      handleCheckOutDateChange(event.target.value)
+                    }
                     className={TRAVEL_FIELD_CLASSES}
                   />
                 </label>
@@ -905,6 +946,10 @@ export default function ExperienceDetailPage() {
                 />
               </label>
             </>
+          ) : null}
+
+          {travelDetailError ? (
+            <p className="text-sm text-red-600">{travelDetailError}</p>
           ) : null}
 
           <button
