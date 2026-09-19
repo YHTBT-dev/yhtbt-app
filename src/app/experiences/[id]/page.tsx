@@ -15,6 +15,13 @@ import {
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
 import { addFaq, getFaqs } from "@/data/faqsStore";
+import {
+  addPoll,
+  getPolls,
+  getVotedPollIds,
+  markPollVoted,
+  recordVote,
+} from "@/data/pollsStore";
 import Modal from "@/components/Modal";
 
 // react-quill-new relies on the browser's `document`, so it can only be
@@ -98,6 +105,17 @@ type Faq = {
   question: string;
   answer: string;
 };
+
+type Poll = {
+  id: number;
+  experienceId: string;
+  question: string;
+  options: string[];
+  votes: Record<string, number>;
+};
+
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 5;
 
 type FlightDetail = {
   id: number;
@@ -393,6 +411,11 @@ export default function ExperienceDetailPage() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [votedPollIds, setVotedPollIds] = useState<number[]>([]);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
     useState(false);
@@ -428,6 +451,8 @@ export default function ExperienceDetailPage() {
     setCollapsedSections(loadCollapsedSections(params.id));
     setUpdates(getUpdates(params.id));
     setFaqs(getFaqs(params.id));
+    setPolls(getPolls(params.id));
+    setVotedPollIds(getVotedPollIds());
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -469,6 +494,57 @@ export default function ExperienceDetailPage() {
     setIsFaqModalOpen(false);
     setFaqQuestion("");
     setFaqAnswer("");
+  }
+
+  function handlePollOptionChange(index: number, value: string) {
+    setPollOptions((current) =>
+      current.map((option, i) => (i === index ? value : option))
+    );
+  }
+
+  function handleAddPollOption() {
+    setPollOptions((current) =>
+      current.length >= MAX_POLL_OPTIONS ? current : [...current, ""]
+    );
+  }
+
+  function handleClosePollModal() {
+    setIsPollModalOpen(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+  }
+
+  function handleAddPoll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedOptions = pollOptions
+      .map((option) => option.trim())
+      .filter(Boolean);
+    if (trimmedOptions.length < MIN_POLL_OPTIONS) return;
+
+    const newPoll = addPoll({
+      experienceId: params.id,
+      question: pollQuestion,
+      options: trimmedOptions,
+    });
+
+    setPolls((current) => [...current, newPoll]);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setIsPollModalOpen(false);
+  }
+
+  function handleVote(pollId: number, option: string) {
+    if (votedPollIds.includes(pollId)) return;
+
+    const updatedPoll = recordVote(pollId, option);
+    if (!updatedPoll) return;
+
+    setPolls((current) =>
+      current.map((poll) => (poll.id === pollId ? updatedPoll : poll))
+    );
+    markPollVoted(pollId);
+    setVotedPollIds((current) => [...current, pollId]);
   }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -1054,6 +1130,159 @@ export default function ExperienceDetailPage() {
                     </p>
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("polls")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.polls} />
+            Polls
+          </button>
+        </h2>
+
+        {collapsedSections.polls ? null : (
+          <>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsPollModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add Poll
+              </button>
+            </div>
+
+            <Modal
+              isOpen={isPollModalOpen}
+              onClose={handleClosePollModal}
+              title="Add Poll"
+            >
+              <form onSubmit={handleAddPoll} className="flex flex-col gap-6">
+                <label className="block">
+                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={pollQuestion}
+                    onChange={(event) => setPollQuestion(event.target.value)}
+                    placeholder="Where should we go for the group dinner?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <div className="flex flex-col gap-4">
+                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                    Options
+                  </span>
+                  {pollOptions.map((option, index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      required
+                      value={option}
+                      onChange={(event) =>
+                        handlePollOptionChange(index, event.target.value)
+                      }
+                      placeholder={`Option ${index + 1}`}
+                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                    />
+                  ))}
+
+                  {pollOptions.length < MAX_POLL_OPTIONS ? (
+                    <button
+                      type="button"
+                      onClick={handleAddPollOption}
+                      className="self-start text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      + Add another option
+                    </button>
+                  ) : null}
+                </div>
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add Poll
+                </button>
+              </form>
+            </Modal>
+
+            {polls.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+                No polls yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {polls.map((poll) => {
+                  const hasVoted = votedPollIds.includes(poll.id);
+                  const totalVotes = Object.values(poll.votes).reduce(
+                    (sum, count) => sum + count,
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={poll.id}
+                      className="border-b border-foreground/10 pb-8 last:border-b-0"
+                    >
+                      <p className="font-serif text-lg text-foreground">
+                        {poll.question}
+                      </p>
+                      <div className="mt-4 flex flex-col gap-3">
+                        {poll.options.map((option) => {
+                          const count = poll.votes[option] ?? 0;
+                          const percentage =
+                            totalVotes === 0
+                              ? 0
+                              : Math.round((count / totalVotes) * 100);
+
+                          if (!hasVoted) {
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => handleVote(poll.id, option)}
+                                className="border border-foreground/10 px-4 py-3 text-left font-serif text-lg text-foreground transition-colors hover:border-accent hover:text-accent"
+                              >
+                                {option}
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <div key={option}>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="font-serif text-lg text-foreground">
+                                  {option}
+                                </span>
+                                <span className="shrink-0 text-sm text-foreground/60">
+                                  {count} ({percentage}%)
+                                </span>
+                              </div>
+                              <div className="mt-1 h-2 w-full bg-foreground/10">
+                                <div
+                                  className="h-2 bg-accent"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>
