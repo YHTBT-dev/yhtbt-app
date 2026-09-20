@@ -9,6 +9,11 @@ const FIELD_CLASSES =
 
 const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
 
+// Experiences at or under this estimated guest count are free — no
+// platform fee, no Stripe Checkout. Above it, the host pays the platform
+// tier fee via Checkout before the experience is created.
+const GUEST_COUNT_FREE_TIER_THRESHOLD = 20;
+
 export default function NewExperiencePage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -16,9 +21,11 @@ export default function NewExperiencePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
+  const [estimatedGuestCount, setEstimatedGuestCount] = useState("");
   const [isHosting, setIsHosting] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks whether endDate should keep following startDate. Stays true
   // until the user manually sets endDate to something other than
   // startDate, at which point their multi-day choice is respected.
@@ -34,7 +41,7 @@ export default function NewExperiencePage() {
     if (value !== startDate) setIsEndDateAutoSynced(false);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!isHosting && !isAttending) {
@@ -47,6 +54,12 @@ export default function NewExperiencePage() {
       return;
     }
 
+    const guestCount = Number(estimatedGuestCount);
+    if (!estimatedGuestCount || !Number.isInteger(guestCount) || guestCount < 1) {
+      setError("Enter a valid estimated guest count.");
+      return;
+    }
+
     setError("");
 
     const roles = [
@@ -54,17 +67,63 @@ export default function NewExperiencePage() {
       ...(isAttending ? ["attended"] : []),
     ];
 
-    addExperience({
-      name,
-      coverImage,
-      startDate,
-      endDate,
-      location,
-      roles,
-    });
+    // Small experiences are free — no platform fee, no Checkout. The real
+    // guest list built later in the Guests section is separate from this
+    // upfront estimate.
+    if (guestCount <= GUEST_COUNT_FREE_TIER_THRESHOLD) {
+      const newExperience = addExperience({
+        name,
+        coverImage,
+        startDate,
+        endDate,
+        location,
+        roles,
+        estimatedGuestCount: guestCount,
+        paid: false,
+      });
+      sessionStorage.setItem("justCreated", String(newExperience.id));
+      router.push(`/experiences/${newExperience.id}`);
+      return;
+    }
 
-    router.push("/experiences");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          coverImage,
+          startDate,
+          endDate,
+          location,
+          roles,
+          estimatedGuestCount: guestCount,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        setError(data.error || "Could not start checkout. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Full navigation to Stripe's hosted Checkout page, outside the app.
+      window.location.href = data.url;
+    } catch {
+      setError("Could not start checkout. Please try again.");
+      setIsSubmitting(false);
+    }
   }
+
+  const guestCountValue = Number(estimatedGuestCount);
+  const requiresPayment =
+    estimatedGuestCount !== "" &&
+    Number.isInteger(guestCountValue) &&
+    guestCountValue > GUEST_COUNT_FREE_TIER_THRESHOLD;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
@@ -159,15 +218,40 @@ export default function NewExperiencePage() {
           </label>
         </div>
 
+        <label className="block">
+          <span className={LABEL_CLASSES}>Estimated Guest Count</span>
+          <input
+            type="number"
+            required
+            min={1}
+            step={1}
+            value={estimatedGuestCount}
+            onChange={(event) => setEstimatedGuestCount(event.target.value)}
+            placeholder="12"
+            className={FIELD_CLASSES}
+          />
+        </label>
+
+        <p className="text-sm text-foreground/50 italic">
+          {requiresPayment
+            ? `Experiences over ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests require the platform tier fee. You'll be taken to a secure Stripe checkout page (test mode) next.`
+            : `Experiences of ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests or fewer are free — no payment required.`}
+        </p>
+
         {error ? (
           <p className="text-sm text-red-600">{error}</p>
         ) : null}
 
         <button
           type="submit"
-          className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          disabled={isSubmitting}
+          className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Create Experience
+          {isSubmitting
+            ? "Redirecting to Checkout…"
+            : requiresPayment
+              ? "Continue to Payment"
+              : "Create Experience"}
         </button>
       </form>
     </main>

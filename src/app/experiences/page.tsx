@@ -7,6 +7,9 @@ import { getExperiences, normalizeExperience } from "@/data/experiencesStore";
 
 type Role = "hosted" | "attended";
 
+const DELETED_TOAST_VISIBLE_DURATION_MS = 3000;
+const DELETED_TOAST_FADE_DURATION_MS = 500;
+
 const TABS: { label: string; value: Role }[] = [
   { label: "Hosted", value: "hosted" },
   { label: "Attended", value: "attended" },
@@ -44,10 +47,50 @@ export default function ExperiencesPage() {
   const [experiences, setExperiences] = useState(() =>
     mockExperiences.map(normalizeExperience)
   );
+  // Shown only right after landing here from deleting an Experience (via
+  // the sessionStorage "justDeleted" flag set right before the redirect),
+  // not on normal visits. "Mounted" keeps it in the DOM through the
+  // fade-out transition; "Visible" drives the opacity so the fade is
+  // animated rather than an abrupt disappearance.
+  const [isDeletedToastMounted, setIsDeletedToastMounted] = useState(false);
+  const [isDeletedToastVisible, setIsDeletedToastVisible] = useState(false);
+  // Read once, synchronously, during render — a lazy initializer never
+  // re-runs and never mutates anything, so it's safe under React Strict
+  // Mode's double-render check in dev (see the creation banner on the
+  // Experience detail page for why reading this from inside an effect
+  // instead would leave the toast stuck on screen).
+  const [deletedExperienceName] = useState(() =>
+    typeof window !== "undefined" ? sessionStorage.getItem("justDeleted") : null
+  );
 
   useEffect(() => {
     setExperiences(getExperiences());
   }, []);
+
+  useEffect(() => {
+    if (!deletedExperienceName) return;
+
+    // Clear the flag so refreshing or revisiting this page doesn't
+    // re-trigger the toast. Safe to call more than once (e.g. if this
+    // effect's Strict Mode dev double-invoke re-runs it) — removing an
+    // already-removed key is a no-op.
+    sessionStorage.removeItem("justDeleted");
+
+    setIsDeletedToastMounted(true);
+    setIsDeletedToastVisible(true);
+
+    const hideTimer = setTimeout(() => {
+      setIsDeletedToastVisible(false);
+    }, DELETED_TOAST_VISIBLE_DURATION_MS);
+    const unmountTimer = setTimeout(() => {
+      setIsDeletedToastMounted(false);
+    }, DELETED_TOAST_VISIBLE_DURATION_MS + DELETED_TOAST_FADE_DURATION_MS);
+
+    return () => {
+      clearTimeout(hideTimer);
+      clearTimeout(unmountTimer);
+    };
+  }, [deletedExperienceName]);
 
   const filteredExperiences = useMemo(
     () =>
@@ -61,6 +104,20 @@ export default function ExperiencesPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
+      {isDeletedToastMounted ? (
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4">
+          <div
+            className={`border border-accent bg-background px-6 py-3 shadow-sm transition-opacity duration-500 ${
+              isDeletedToastVisible ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <p className="font-serif text-base text-foreground">
+              {deletedExperienceName} was deleted
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-start justify-between gap-4">
         <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
           Your Experiences

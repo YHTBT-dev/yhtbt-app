@@ -149,3 +149,14 @@ export function deletePhoto(photoId) {
   const updatedPhotos = photos.filter((photo) => photo.id !== photoId);
   writeToStorage(updatedPhotos);
 }
+
+// Removes every photo for an experience — used when the experience itself
+// is deleted, so nothing is left orphaned. This is also where the most
+// localStorage space gets freed, since photos are stored as base64.
+export function deleteAllForExperience(experienceId) {
+  const photos = getAllPhotos();
+  const updatedPhotos = photos.filter(
+    (photo) => photo.experienceId !== experienceId
+  );
+  writeToStorage(updatedPhotos);
+}

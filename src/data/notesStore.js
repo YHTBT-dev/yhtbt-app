@@ -34,3 +34,13 @@ export function saveNote(experienceId, note) {
   notes[experienceId] = note;
   writeToStorage(notes);
 }
+
+// Removes the note for an experience — used when the experience itself
+// is deleted, so nothing is left orphaned. Named to match the other
+// stores' deleteAllForExperience, even though there's only ever one note.
+export function deleteAllForExperience(experienceId) {
+  const notes = readFromStorage();
+  if (!(experienceId in notes)) return;
+  delete notes[experienceId];
+  writeToStorage(notes);
+}

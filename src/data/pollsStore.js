@@ -94,3 +94,27 @@ export function markPollVoted(pollId) {
     writeVotedPollIds([...ids, pollId]);
   }
 }
+
+// Removes every poll for an experience — used when the experience itself
+// is deleted, so nothing is left orphaned. Also clears those polls' IDs
+// out of the separate voted-polls tracking list, since a vote record for
+// a poll that no longer exists is itself orphaned data.
+export function deleteAllForExperience(experienceId) {
+  const polls = getAllPolls();
+  const deletedPollIds = new Set(
+    polls
+      .filter((poll) => poll.experienceId === experienceId)
+      .map((poll) => poll.id)
+  );
+
+  const remainingPolls = polls.filter(
+    (poll) => poll.experienceId !== experienceId
+  );
+  writeToStorage(remainingPolls);
+
+  if (deletedPollIds.size > 0) {
+    const votedIds = readVotedPollIds();
+    const updatedVotedIds = votedIds.filter((id) => !deletedPollIds.has(id));
+    writeVotedPollIds(updatedVotedIds);
+  }
+}

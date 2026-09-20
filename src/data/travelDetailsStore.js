@@ -62,3 +62,13 @@ export function updateTravelDetail(id, fields) {
   writeToStorage(updatedEntries);
   return updatedEntry;
 }
+
+// Removes every travel detail entry for an experience — used when the
+// experience itself is deleted, so nothing is left orphaned.
+export function deleteAllForExperience(experienceId) {
+  const entries = getAllTravelDetails();
+  const updatedEntries = entries.filter(
+    (entry) => entry.experienceId !== experienceId
+  );
+  writeToStorage(updatedEntries);
+}

@@ -66,3 +66,13 @@ export function updateGuestStatus(id, rsvpStatus) {
   writeToStorage(updatedGuests);
   return updatedGuest;
 }
+
+// Removes every guest for an experience — used when the experience itself
+// is deleted, so nothing is left orphaned.
+export function deleteAllForExperience(experienceId) {
+  const guests = getAllGuests();
+  const updatedGuests = guests.filter(
+    (guest) => guest.experienceId !== experienceId
+  );
+  writeToStorage(updatedGuests);
+}

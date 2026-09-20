@@ -22,11 +22,25 @@ function writeToStorage(experiences) {
 
 // Older records may still have a single "role" string instead of a
 // "roles" array; treat those as roles: [role] instead of crashing.
+// Records from before the platform tier fee existed have no "paid" field —
+// default to false rather than treating them as having paid. Records from
+// before guest-count tiering existed have no "estimatedGuestCount" —
+// default to null (unknown), distinct from the real guest list built
+// later in the Guests section.
 export function normalizeExperience(experience) {
-  if (Array.isArray(experience.roles)) return experience;
+  const withRoles = Array.isArray(experience.roles)
+    ? experience
+    : (() => {
+        const { role, ...rest } = experience;
+        return { ...rest, roles: role ? [role] : [] };
+      })();
 
-  const { role, ...rest } = experience;
-  return { ...rest, roles: role ? [role] : [] };
+  return {
+    ...withRoles,
+    paid: withRoles.paid ?? false,
+    estimatedGuestCount: withRoles.estimatedGuestCount ?? null,
+    checkoutSessionId: withRoles.checkoutSessionId ?? null,
+  };
 }
 
 export function getExperiences() {
@@ -39,6 +53,19 @@ export function getExperiences() {
 
   writeToStorage(mockExperiences);
   return mockExperiences.map(normalizeExperience);
+}
+
+// Looks up an experience already created for a given Stripe Checkout
+// Session ID, so the paid-experience creation step (see
+// /experiences/new/success) can be idempotent: if this session already
+// produced an experience, don't create a second one.
+export function getExperienceByCheckoutSessionId(checkoutSessionId) {
+  if (!checkoutSessionId) return null;
+  return (
+    getExperiences().find(
+      (experience) => experience.checkoutSessionId === checkoutSessionId
+    ) ?? null
+  );
 }
 
 export function addExperience(experience) {
@@ -65,4 +92,16 @@ export function updateExperience(id, fields) {
 
   writeToStorage(updatedExperiences);
   return updatedExperience;
+}
+
+// Deletes only the experience record itself. To also remove everything
+// else keyed to this experience (itinerary, guests, photos, etc.), use
+// deleteExperienceCompletely in @/data/deleteExperienceCascade instead —
+// this function alone would leave orphaned data behind.
+export function deleteExperience(id) {
+  const experiences = getExperiences();
+  const updatedExperiences = experiences.filter(
+    (experience) => experience.id !== id
+  );
+  writeToStorage(updatedExperiences);
 }

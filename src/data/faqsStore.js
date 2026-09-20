@@ -38,3 +38,11 @@ export function addFaq(faq) {
   writeToStorage(updatedFaqs);
   return newFaq;
 }
+
+// Removes every FAQ for an experience — used when the experience itself
+// is deleted, so nothing is left orphaned.
+export function deleteAllForExperience(experienceId) {
+  const faqs = getAllFaqs();
+  const updatedFaqs = faqs.filter((faq) => faq.experienceId !== experienceId);
+  writeToStorage(updatedFaqs);
+}

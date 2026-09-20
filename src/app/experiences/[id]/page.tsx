@@ -1,10 +1,11 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getExperiences } from "@/data/experiencesStore";
+import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
 import { getItineraryItems } from "@/data/itineraryStore";
 import { getNote, saveNote } from "@/data/notesStore";
 import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
@@ -48,6 +49,8 @@ const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 
 const NOTE_SAVE_DEBOUNCE_MS = 800;
 const SAVED_INDICATOR_DURATION_MS = 2000;
+const CREATED_TOAST_VISIBLE_DURATION_MS = 3000;
+const CREATED_TOAST_FADE_DURATION_MS = 500;
 const NOTE_TOOLBAR_MODULES = {
   toolbar: [["bold", "italic"], [{ list: "bullet" }]],
 };
@@ -291,8 +294,30 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
 
 export default function ExperienceDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [experience, setExperience] = useState<Experience | null | undefined>(
     undefined
+  );
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  // Shown only right after landing here from creating this Experience (via
+  // the sessionStorage "justCreated" flag set right before the redirect),
+  // not on normal visits. "Mounted" keeps it in the DOM through the
+  // fade-out transition; "Visible" drives the opacity so the fade is
+  // animated rather than an abrupt disappearance.
+  const [isCreatedToastMounted, setIsCreatedToastMounted] = useState(false);
+  const [isCreatedToastVisible, setIsCreatedToastVisible] = useState(false);
+  // Read once, synchronously, during render. A lazy initializer never
+  // re-runs and never mutates anything, so it's safe under React Strict
+  // Mode's double-render check in dev — unlike deciding this from inside
+  // an effect, whose second (Strict Mode) invocation would find the flag
+  // already removed by the first, and skip scheduling the timers that
+  // hide the toast, leaving it stuck on screen.
+  const [wasJustCreated] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("justCreated") === params.id
   );
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -388,6 +413,31 @@ export default function ExperienceDetailPage() {
   }, []);
 
   useEffect(() => {
+    if (!wasJustCreated) return;
+
+    // Clear the flag so refreshing or revisiting this page doesn't
+    // re-trigger the toast. Safe to call more than once (e.g. if this
+    // effect's Strict Mode dev double-invoke re-runs it) — removing an
+    // already-removed key is a no-op.
+    sessionStorage.removeItem("justCreated");
+
+    setIsCreatedToastMounted(true);
+    setIsCreatedToastVisible(true);
+
+    const hideTimer = setTimeout(() => {
+      setIsCreatedToastVisible(false);
+    }, CREATED_TOAST_VISIBLE_DURATION_MS);
+    const unmountTimer = setTimeout(() => {
+      setIsCreatedToastMounted(false);
+    }, CREATED_TOAST_VISIBLE_DURATION_MS + CREATED_TOAST_FADE_DURATION_MS);
+
+    return () => {
+      clearTimeout(hideTimer);
+      clearTimeout(unmountTimer);
+    };
+  }, [wasJustCreated]);
+
+  useEffect(() => {
     const experiences = getExperiences();
     const found = experiences.find(
       (item: Experience) => String(item.id) === params.id
@@ -412,6 +462,33 @@ export default function ExperienceDetailPage() {
       saveCollapsedSections(params.id, next);
       return next;
     });
+  }
+
+  function handleOpenDeleteModal() {
+    // Reset explicitly on open (not just on close) so stale text can't
+    // possibly carry over from a previous open, however this modal got
+    // dismissed last time.
+    setDeleteConfirmationInput("");
+    setIsDeleteModalOpen(true);
+  }
+
+  function handleCloseDeleteModal() {
+    setIsDeleteModalOpen(false);
+    setDeleteConfirmationInput("");
+  }
+
+  function handleConfirmDelete() {
+    if (!experience) return;
+
+    const matches =
+      deleteConfirmationInput.trim().toLowerCase() ===
+      experience.name.trim().toLowerCase();
+    if (!matches) return;
+
+    setIsDeleting(true);
+    sessionStorage.setItem("justDeleted", experience.name);
+    deleteExperienceCompletely(params.id);
+    router.push("/experiences");
   }
 
   function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
@@ -890,6 +967,12 @@ export default function ExperienceDetailPage() {
     );
   }
 
+  // Trimmed and case-insensitive so stray whitespace or casing doesn't
+  // block an otherwise-correct confirmation.
+  const isDeleteConfirmationMatching =
+    deleteConfirmationInput.trim().toLowerCase() ===
+    experience.name.trim().toLowerCase();
+
   const groupedItinerary = groupByDate(itineraryItems);
 
   // Live "happening now" / "up next" highlighting only makes sense while
@@ -936,6 +1019,20 @@ export default function ExperienceDetailPage() {
 
   return (
     <>
+      {isCreatedToastMounted ? (
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4">
+          <div
+            className={`border border-accent bg-background px-6 py-3 shadow-sm transition-opacity duration-500 ${
+              isCreatedToastVisible ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <p className="font-serif text-base text-foreground">
+              <span className="text-accent">✓</span> {experience.name} created!
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="relative h-64 w-full overflow-hidden sm:h-80">
         {experience.coverImage && !coverImageError ? (
           <>
@@ -2669,6 +2766,74 @@ export default function ExperienceDetailPage() {
       )}
       </>
       )}
+
+      {isPreviewingAsGuest ? null : (
+        <div className="mt-24 border-t border-foreground/10 pt-8">
+          <button
+            type="button"
+            onClick={handleOpenDeleteModal}
+            className="text-sm text-red-600/70 underline underline-offset-2 transition-colors hover:text-red-600"
+          >
+            Delete Experience
+          </button>
+        </div>
+      )}
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        title="Delete Experience"
+      >
+        <p className="text-foreground/70">
+          This permanently deletes{" "}
+          <strong className="font-serif font-normal text-foreground">
+            {experience.name}
+          </strong>{" "}
+          and everything attached to it — itinerary, guests, travel
+          details, photos, notes, FAQs, polls, and updates. This
+          can&apos;t be undone.
+        </p>
+
+        <label className="mt-6 block">
+          <span className="text-sm tracking-wide text-foreground/50 uppercase">
+            Type &quot;{experience.name}&quot; to confirm
+          </span>
+          <input
+            type="text"
+            value={deleteConfirmationInput}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setDeleteConfirmationInput(nextValue);
+              console.log("Delete confirmation:", {
+                typed: nextValue,
+                expected: experience.name,
+                matches:
+                  nextValue.trim().toLowerCase() ===
+                  experience.name.trim().toLowerCase(),
+              });
+            }}
+            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+          />
+        </label>
+
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleConfirmDelete}
+            disabled={!isDeleteConfirmationMatching || isDeleting}
+            className="border border-red-600 px-6 py-3 text-sm tracking-wide text-red-600 uppercase transition-colors hover:bg-red-600 hover:text-background disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isDeleting ? "Deleting…" : "Delete Experience"}
+          </button>
+          <button
+            type="button"
+            onClick={handleCloseDeleteModal}
+            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
       </main>
     </>
   );

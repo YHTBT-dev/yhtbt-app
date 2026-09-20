@@ -46,3 +46,13 @@ export function addUpdate(update) {
   writeToStorage(updatedUpdates);
   return newUpdate;
 }
+
+// Removes every update for an experience — used when the experience
+// itself is deleted, so nothing is left orphaned.
+export function deleteAllForExperience(experienceId) {
+  const updates = getAllUpdates();
+  const updatedUpdates = updates.filter(
+    (update) => update.experienceId !== experienceId
+  );
+  writeToStorage(updatedUpdates);
+}
