@@ -269,6 +269,32 @@ function formatRelativeTime(timestamp: string) {
   return rtf.format(-diffSeconds, "second");
 }
 
+// Strips characters that aren't safe across filesystems and collapses
+// whitespace into hyphens, so an experience name can be used as the base
+// of a downloaded filename.
+function sanitizeForFilename(value: string) {
+  return value
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function getPhotoFileExtension(dataUrl: string) {
+  const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
+  const subtype = match?.[1]?.toLowerCase();
+  if (subtype === "jpeg" || subtype === "jpg") return "jpg";
+  if (subtype === "png") return "png";
+  if (subtype === "gif") return "gif";
+  if (subtype === "webp") return "webp";
+  return "jpg";
+}
+
+function getPhotoDownloadFilename(experienceName: string, photo: Photo) {
+  const base = sanitizeForFilename(experienceName) || "photo";
+  const extension = getPhotoFileExtension(photo.dataUrl);
+  return `${base}-${photo.id}.${extension}`;
+}
+
 function getMapsUrl(location: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     location
@@ -2532,13 +2558,25 @@ export default function ExperienceDetailPage() {
                       <p className="text-xs text-foreground/50">
                         {formatRelativeTime(photo.timestamp)}
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => handleDeletePhoto(photo.id)}
-                        className="shrink-0 text-xs text-foreground/30 underline underline-offset-2 transition-colors hover:text-red-600"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <a
+                          href={photo.dataUrl}
+                          download={getPhotoDownloadFilename(
+                            experience.name,
+                            photo
+                          )}
+                          className="text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Download
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePhoto(photo.id)}
+                          className="text-xs text-foreground/30 underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     {taggingPhotoId === photo.id ? null : photo.taggedNames
                         .length > 0 ? (
