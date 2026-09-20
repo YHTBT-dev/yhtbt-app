@@ -8,9 +8,11 @@ const STORAGE_KEY = "yhtbt:photos";
 // should go there instead, and this store should hold just a URL/reference
 // rather than the raw image data.
 
-// Photo shape: { id, experienceId, dataUrl, taggedNames, timestamp }.
-// taggedNames is an array of guest names tagged in the photo (may be
-// empty). timestamp is set automatically when the photo is uploaded.
+// Photo shape: { id, experienceId, dataUrl, taggedNames, itineraryItemId,
+// timestamp }. taggedNames is an array of guest names tagged in the photo
+// (may be empty). itineraryItemId optionally links the photo to a specific
+// itinerary item (null if not linked — not every photo needs one).
+// timestamp is set automatically when the photo is uploaded.
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
@@ -58,7 +60,11 @@ function logLocalStorageUsage() {
 // Photos saved before taggedNames existed (or from the brief uploaderName
 // version of this feature) may not have it — always return an array.
 function normalizePhoto(photo) {
-  return { ...photo, taggedNames: photo.taggedNames ?? [] };
+  return {
+    ...photo,
+    taggedNames: photo.taggedNames ?? [],
+    itineraryItemId: photo.itineraryItemId ?? null,
+  };
 }
 
 export function getPhotos(experienceId) {
@@ -102,6 +108,33 @@ export function setPhotoTags(photoId, names) {
   } catch (error) {
     console.error(
       "[photosStore] Failed to save photo tags — localStorage write threw an error instead of saving silently failing. This is most likely a storage quota issue, since photos are stored as base64 data URLs, which use a lot of space.",
+      error
+    );
+    logLocalStorageUsage();
+    return null;
+  }
+
+  return updatedPhoto;
+}
+
+// Sets (or clears, passing null) which itinerary item a photo is linked
+// to. Replaces rather than merges, since a photo can only link to one
+// moment at a time.
+export function setPhotoItineraryItem(photoId, itineraryItemId) {
+  const photos = getAllPhotos();
+  let updatedPhoto = null;
+
+  const updatedPhotos = photos.map((photo) => {
+    if (photo.id !== photoId) return photo;
+    updatedPhoto = { ...photo, itineraryItemId: itineraryItemId ?? null };
+    return updatedPhoto;
+  });
+
+  try {
+    writeToStorage(updatedPhotos);
+  } catch (error) {
+    console.error(
+      "[photosStore] Failed to save photo's itinerary link — localStorage write threw an error instead of failing silently. This is most likely a storage quota issue, since photos are stored as base64 data URLs, which use a lot of space.",
       error
     );
     logLocalStorageUsage();

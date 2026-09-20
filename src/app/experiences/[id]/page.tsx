@@ -26,9 +26,16 @@ import {
   addPhoto,
   deletePhoto,
   getPhotos,
+  setPhotoItineraryItem,
   setPhotoTags,
 } from "@/data/photosStore";
 import Modal from "@/components/Modal";
+import {
+  formatRelativeTime,
+  formatShortDate,
+  getPhotoDownloadFilename,
+  parseLocalDate,
+} from "@/lib/format";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -134,6 +141,7 @@ type Photo = {
   experienceId: string;
   dataUrl: string;
   taggedNames: string[];
+  itineraryItemId: number | null;
   timestamp: string;
 };
 
@@ -191,17 +199,6 @@ const TRAVEL_FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
 const TRAVEL_LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
 
-// Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
-// letting `new Date(string)` treat it as UTC, which can shift the date by
-// one day depending on the viewer's timezone offset. Returns null if the
-// value is missing instead of crashing.
-function parseLocalDate(dateString: string | undefined | null) {
-  if (!dateString) return null;
-
-  const [year, month, day] = dateString.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
 function formatDateRange(startDate: string, endDate: string) {
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
@@ -243,56 +240,6 @@ function formatSingleDate(dateString: string | undefined) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 60 * 60 * 24 * 365],
-  ["month", 60 * 60 * 24 * 30],
-  ["week", 60 * 60 * 24 * 7],
-  ["day", 60 * 60 * 24],
-  ["hour", 60 * 60],
-  ["minute", 60],
-];
-
-function formatRelativeTime(timestamp: string) {
-  const diffSeconds = Math.round(
-    (Date.now() - new Date(timestamp).getTime()) / 1000
-  );
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-  for (const [unit, secondsInUnit] of RELATIVE_TIME_UNITS) {
-    if (Math.abs(diffSeconds) >= secondsInUnit) {
-      return rtf.format(-Math.round(diffSeconds / secondsInUnit), unit);
-    }
-  }
-
-  return rtf.format(-diffSeconds, "second");
-}
-
-// Strips characters that aren't safe across filesystems and collapses
-// whitespace into hyphens, so an experience name can be used as the base
-// of a downloaded filename.
-function sanitizeForFilename(value: string) {
-  return value
-    .trim()
-    .replace(/[/\\?%*:|"<>]/g, "")
-    .replace(/\s+/g, "-");
-}
-
-function getPhotoFileExtension(dataUrl: string) {
-  const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
-  const subtype = match?.[1]?.toLowerCase();
-  if (subtype === "jpeg" || subtype === "jpg") return "jpg";
-  if (subtype === "png") return "png";
-  if (subtype === "gif") return "gif";
-  if (subtype === "webp") return "webp";
-  return "jpg";
-}
-
-function getPhotoDownloadFilename(experienceName: string, photo: Photo) {
-  const base = sanitizeForFilename(experienceName) || "photo";
-  const extension = getPhotoFileExtension(photo.dataUrl);
-  return `${base}-${photo.id}.${extension}`;
 }
 
 function getMapsUrl(location: string) {
@@ -483,6 +430,7 @@ export default function ExperienceDetailPage() {
   const [photoUploadError, setPhotoUploadError] = useState("");
   const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
   const [photoTagInputValue, setPhotoTagInputValue] = useState("");
+  const [linkingPhotoId, setLinkingPhotoId] = useState<number | null>(null);
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
     useState(false);
@@ -673,6 +621,28 @@ export default function ExperienceDetailPage() {
       setTaggingPhotoId(null);
       setPhotoTagInputValue("");
     }
+    if (linkingPhotoId === photoId) {
+      setLinkingPhotoId(null);
+    }
+  }
+
+  function handleStartLinkPhoto(photoId: number) {
+    setLinkingPhotoId(photoId);
+  }
+
+  function handleCloseLinkPhoto() {
+    setLinkingPhotoId(null);
+  }
+
+  function handleSelectPhotoItineraryItem(photoId: number, value: string) {
+    const itineraryItemId = value ? Number(value) : null;
+    const updatedPhoto = setPhotoItineraryItem(photoId, itineraryItemId);
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((photo) => (photo.id === photoId ? updatedPhoto : photo))
+      );
+    }
+    setLinkingPhotoId(null);
   }
 
   function handlePhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -2500,7 +2470,7 @@ export default function ExperienceDetailPage() {
         )}
       </div>
 
-      <div className="mt-12">
+      <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">
           <button
             type="button"
@@ -2511,6 +2481,13 @@ export default function ExperienceDetailPage() {
             Photos
           </button>
         </h2>
+        <Link
+          href={`/experiences/${params.id}/album`}
+          className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          View Album
+        </Link>
+      </div>
 
         {collapsedSections.photos ? null : (
           <>
@@ -2656,13 +2633,60 @@ export default function ExperienceDetailPage() {
                         Tag someone
                       </button>
                     )}
+
+                    {linkingPhotoId === photo.id ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <select
+                          value={photo.itineraryItemId ?? ""}
+                          onChange={(event) =>
+                            handleSelectPhotoItineraryItem(
+                              photo.id,
+                              event.target.value
+                            )
+                          }
+                          className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground focus:border-accent focus:outline-none"
+                        >
+                          <option value="">No link</option>
+                          {itineraryItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title} — {formatShortDate(item.date)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleCloseLinkPhoto}
+                          className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartLinkPhoto(photo.id)}
+                        className="mt-1 block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        {(() => {
+                          const linkedItem = photo.itineraryItemId
+                            ? itineraryItems.find(
+                                (item) => item.id === photo.itineraryItemId
+                              )
+                            : null;
+                          return linkedItem
+                            ? `Linked: ${linkedItem.title} — ${formatShortDate(
+                                linkedItem.date
+                              )}`
+                            : "Link to a moment";
+                        })()}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </>
         )}
-      </div>
 
       {!isPreviewingAsGuest && (
       <>
