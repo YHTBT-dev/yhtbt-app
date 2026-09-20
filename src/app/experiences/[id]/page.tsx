@@ -31,9 +31,14 @@ import {
 } from "@/data/photosStore";
 import Modal from "@/components/Modal";
 import {
+  formatDateHeading,
+  formatDateRange,
   formatRelativeTime,
   formatShortDate,
+  formatTime,
+  formatTimeRange,
   getPhotoDownloadFilename,
+  groupByDate,
   parseLocalDate,
 } from "@/lib/format";
 
@@ -199,38 +204,6 @@ const TRAVEL_FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
 const TRAVEL_LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
 
-function formatDateRange(startDate: string, endDate: string) {
-  const start = parseLocalDate(startDate);
-  const end = parseLocalDate(endDate);
-  const opts: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  };
-
-  if (!start || !end) return "";
-
-  if (startDate === endDate) {
-    return start.toLocaleDateString("en-US", opts);
-  }
-
-  return `${start.toLocaleDateString("en-US", opts)} – ${end.toLocaleDateString(
-    "en-US",
-    opts
-  )}`;
-}
-
-function formatDateHeading(date: string) {
-  const parsed = parseLocalDate(date);
-  if (!parsed) return "";
-
-  return parsed.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
 function formatSingleDate(dateString: string | undefined) {
   const parsed = parseLocalDate(dateString);
   if (!parsed) return "";
@@ -259,34 +232,6 @@ function addOneDay(dateString: string) {
   return `${year}-${month}-${day}`;
 }
 
-function formatTime(time: string | undefined) {
-  if (!time) return "";
-
-  const [hours, minutes] = time.split(":").map(Number);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
-
-  const date = new Date();
-  date.setHours(hours, minutes);
-
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatTimeRange(item: ItineraryItem) {
-  if (item.startTime || item.endTime) {
-    const start = formatTime(item.startTime);
-    const end = formatTime(item.endTime);
-    if (start && end) return `${start} – ${end}`;
-    return start || end;
-  }
-
-  // Fall back to the legacy single "time" field for items saved before
-  // startTime/endTime was introduced.
-  return formatTime(item.time);
-}
-
 function combineDateAndTime(dateString: string, timeString: string | undefined) {
   const date = parseLocalDate(dateString);
   if (!date || !timeString) return null;
@@ -296,21 +241,6 @@ function combineDateAndTime(dateString: string, timeString: string | undefined) 
 
   date.setHours(hours, minutes, 0, 0);
   return date;
-}
-
-function groupByDate(items: ItineraryItem[]) {
-  const groups: { date: string; items: ItineraryItem[] }[] = [];
-
-  for (const item of items) {
-    const group = groups.find((g) => g.date === item.date);
-    if (group) {
-      group.items.push(item);
-    } else {
-      groups.push({ date: item.date, items: [item] });
-    }
-  }
-
-  return groups;
 }
 
 function collapsedSectionsStorageKey(experienceId: string) {
@@ -2481,12 +2411,20 @@ export default function ExperienceDetailPage() {
             Photos
           </button>
         </h2>
-        <Link
-          href={`/experiences/${params.id}/album`}
-          className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
-        >
-          View Album
-        </Link>
+        <div className="flex shrink-0 items-center gap-4">
+          <Link
+            href={`/experiences/${params.id}/album`}
+            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            View Album
+          </Link>
+          <Link
+            href={`/experiences/${params.id}/keepsake`}
+            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            View Keepsake
+          </Link>
+        </div>
       </div>
 
         {collapsedSections.photos ? null : (

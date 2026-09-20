@@ -19,6 +19,89 @@ export function formatShortDate(dateString: string | undefined) {
   });
 }
 
+export function formatDateRange(startDate: string, endDate: string) {
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  const opts: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  };
+
+  if (!start || !end) return "";
+
+  if (startDate === endDate) {
+    return start.toLocaleDateString("en-US", opts);
+  }
+
+  return `${start.toLocaleDateString("en-US", opts)} – ${end.toLocaleDateString(
+    "en-US",
+    opts
+  )}`;
+}
+
+export function formatDateHeading(date: string) {
+  const parsed = parseLocalDate(date);
+  if (!parsed) return "";
+
+  return parsed.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+export function formatTime(time: string | undefined) {
+  if (!time) return "";
+
+  const [hours, minutes] = time.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return time;
+
+  const date = new Date();
+  date.setHours(hours, minutes);
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+type TimeRangeItem = {
+  startTime?: string;
+  endTime?: string;
+  time?: string;
+};
+
+export function formatTimeRange(item: TimeRangeItem) {
+  if (item.startTime || item.endTime) {
+    const start = formatTime(item.startTime);
+    const end = formatTime(item.endTime);
+    if (start && end) return `${start} – ${end}`;
+    return start || end;
+  }
+
+  // Fall back to the legacy single "time" field for items saved before
+  // startTime/endTime was introduced.
+  return formatTime(item.time);
+}
+
+type DateGroupableItem = { date: string };
+
+export function groupByDate<T extends DateGroupableItem>(items: T[]) {
+  const groups: { date: string; items: T[] }[] = [];
+
+  for (const item of items) {
+    const group = groups.find((g) => g.date === item.date);
+    if (group) {
+      group.items.push(item);
+    } else {
+      groups.push({ date: item.date, items: [item] });
+    }
+  }
+
+  return groups;
+}
+
 const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 60 * 60 * 24 * 365],
   ["month", 60 * 60 * 24 * 30],
