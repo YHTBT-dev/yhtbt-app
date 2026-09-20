@@ -57,6 +57,59 @@ function getPhotoSpanClasses(index: number) {
   return "";
 }
 
+function getImageMimeType(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
+  return match?.[1] ?? "image/jpeg";
+}
+
+// Keepsake-only: composites a small "YHTBT" mark onto a *copy* of the
+// photo before it's saved. The original stored photo is never touched —
+// this only affects the file generated at download time, from this page.
+async function downloadWatermarkedPhoto(photoDataUrl: string, filename: string) {
+  const image = new Image();
+  image.src = photoDataUrl;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Failed to load image"));
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.drawImage(image, 0, 0);
+
+  const fontSize = Math.max(12, Math.round(canvas.width * 0.018));
+  const margin = Math.round(canvas.width * 0.02);
+
+  ctx.save();
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.textBaseline = "bottom";
+  ctx.textAlign = "right";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+  ctx.shadowBlur = fontSize * 0.3;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.fillText("Y H T B T", canvas.width - margin, canvas.height - margin);
+  ctx.restore();
+
+  const mimeType = getImageMimeType(photoDataUrl);
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, mimeType, 0.92)
+  );
+  if (!blob) return;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export default function KeepsakePage() {
   const params = useParams<{ id: string }>();
   const [experience, setExperience] = useState<Experience | null | undefined>(
@@ -215,17 +268,22 @@ export default function KeepsakePage() {
                         alt=""
                         className="h-full w-full object-cover"
                       />
-                      <a
-                        href={photo.dataUrl}
-                        download={getPhotoDownloadFilename(
-                          experience.name,
-                          photo,
-                          group.title
-                        )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadWatermarkedPhoto(
+                            photo.dataUrl,
+                            getPhotoDownloadFilename(
+                              experience.name,
+                              photo,
+                              group.title
+                            )
+                          )
+                        }
                         className="absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
                       >
                         Save to device
-                      </a>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -251,16 +309,18 @@ export default function KeepsakePage() {
                         alt=""
                         className="h-full w-full object-cover"
                       />
-                      <a
-                        href={photo.dataUrl}
-                        download={getPhotoDownloadFilename(
-                          experience.name,
-                          photo
-                        )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadWatermarkedPhoto(
+                            photo.dataUrl,
+                            getPhotoDownloadFilename(experience.name, photo)
+                          )
+                        }
                         className="absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
                       >
                         Save to device
-                      </a>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -284,6 +344,13 @@ export default function KeepsakePage() {
           </p>
         )}
       </section>
+
+      <span
+        aria-hidden="true"
+        className="pointer-events-none fixed right-4 bottom-4 text-[10px] tracking-[0.3em] text-foreground/20 uppercase select-none sm:right-6 sm:bottom-6"
+      >
+        YHTBT
+      </span>
     </main>
   );
 }
