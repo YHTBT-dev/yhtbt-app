@@ -22,6 +22,12 @@ import {
   markPollVoted,
   recordVote,
 } from "@/data/pollsStore";
+import {
+  addPhoto,
+  deletePhoto,
+  getPhotos,
+  setPhotoTags,
+} from "@/data/photosStore";
 import Modal from "@/components/Modal";
 
 // react-quill-new relies on the browser's `document`, so it can only be
@@ -122,6 +128,16 @@ type Poll = {
 
 const MIN_POLL_OPTIONS = 2;
 const MAX_POLL_OPTIONS = 5;
+
+type Photo = {
+  id: number;
+  experienceId: string;
+  dataUrl: string;
+  taggedNames: string[];
+  timestamp: string;
+};
+
+const MAX_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
 
 type FlightDetail = {
   id: number;
@@ -437,6 +453,10 @@ export default function ExperienceDetailPage() {
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photoUploadError, setPhotoUploadError] = useState("");
+  const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
+  const [photoTagInputValue, setPhotoTagInputValue] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
     useState(false);
@@ -479,6 +499,7 @@ export default function ExperienceDetailPage() {
     setFaqs(getFaqs(params.id));
     setPolls(getPolls(params.id));
     setVotedPollIds(getVotedPollIds());
+    setPhotos(getPhotos(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -571,6 +592,88 @@ export default function ExperienceDetailPage() {
     );
     markPollVoted(pollId);
     setVotedPollIds((current) => [...current, pollId]);
+  }
+
+  function handleStartTagPhoto(photoId: number) {
+    setTaggingPhotoId(photoId);
+    setPhotoTagInputValue("");
+  }
+
+  function handleCloseTagPhoto() {
+    setTaggingPhotoId(null);
+    setPhotoTagInputValue("");
+  }
+
+  function handleAddPhotoTagNow(photoId: number, rawName: string) {
+    const trimmed = rawName.trim();
+    if (!trimmed) return;
+
+    const photo = photos.find((item) => item.id === photoId);
+    if (!photo || photo.taggedNames.includes(trimmed)) {
+      setPhotoTagInputValue("");
+      return;
+    }
+
+    const updatedPhoto = setPhotoTags(photoId, [...photo.taggedNames, trimmed]);
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((item) => (item.id === photoId ? updatedPhoto : item))
+      );
+    }
+    setPhotoTagInputValue("");
+  }
+
+  function handleRemovePhotoTagNow(photoId: number, name: string) {
+    const photo = photos.find((item) => item.id === photoId);
+    if (!photo) return;
+
+    const updatedPhoto = setPhotoTags(
+      photoId,
+      photo.taggedNames.filter((tag) => tag !== name)
+    );
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((item) => (item.id === photoId ? updatedPhoto : item))
+      );
+    }
+  }
+
+  function handleDeletePhoto(photoId: number) {
+    if (!window.confirm("Delete this photo? This can't be undone.")) return;
+
+    deletePhoto(photoId);
+    setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+    if (taggingPhotoId === photoId) {
+      setTaggingPhotoId(null);
+      setPhotoTagInputValue("");
+    }
+  }
+
+  function handlePhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      setPhotoUploadError("Photo must be 2MB or smaller.");
+      input.value = "";
+      return;
+    }
+
+    setPhotoUploadError("");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const newPhoto = addPhoto({
+        experienceId: params.id,
+        dataUrl,
+      });
+
+      setPhotos((current) => [newPhoto, ...current]);
+      input.value = "";
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -2368,6 +2471,158 @@ export default function ExperienceDetailPage() {
           </div>
         )}
         </>
+        )}
+      </div>
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("photos")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.photos} />
+            Photos
+          </button>
+        </h2>
+
+        {collapsedSections.photos ? null : (
+          <>
+            {isPreviewingAsGuest ? null : (
+              <div className="mt-6">
+                <label className="inline-block border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                  Upload Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
+
+            {isPreviewingAsGuest || !photoUploadError ? null : (
+              <p className="mt-3 text-sm text-red-600">{photoUploadError}</p>
+            )}
+
+            <datalist id="photo-tag-name-options">
+              {guests.map((guest) => (
+                <option key={guest.id} value={guest.name} />
+              ))}
+            </datalist>
+
+            {photos.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+                No photos yet
+              </div>
+            ) : (
+              <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {photos.map((photo) => (
+                  <div key={photo.id}>
+                    <div className="aspect-square w-full overflow-hidden bg-foreground/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.dataUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="text-xs text-foreground/50">
+                        {formatRelativeTime(photo.timestamp)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePhoto(photo.id)}
+                        className="shrink-0 text-xs text-foreground/30 underline underline-offset-2 transition-colors hover:text-red-600"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    {taggingPhotoId === photo.id ? null : photo.taggedNames
+                        .length > 0 ? (
+                      <p className="text-xs text-foreground/50">
+                        with {photo.taggedNames.join(", ")}
+                      </p>
+                    ) : null}
+
+                    {taggingPhotoId === photo.id ? (
+                      <div className="mt-1 flex flex-col gap-2">
+                        {photo.taggedNames.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {photo.taggedNames.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center gap-1 border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-wide text-accent uppercase"
+                              >
+                                {name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRemovePhotoTagNow(photo.id, name)
+                                  }
+                                  aria-label={`Remove ${name}`}
+                                  className="text-accent/70 hover:text-accent"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            list="photo-tag-name-options"
+                            value={photoTagInputValue}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setPhotoTagInputValue(value);
+
+                              const isKnownGuest = guests.some(
+                                (guest) => guest.name === value
+                              );
+                              if (isKnownGuest) {
+                                handleAddPhotoTagNow(photo.id, value);
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleAddPhotoTagNow(
+                                  photo.id,
+                                  photoTagInputValue
+                                );
+                              }
+                            }}
+                            placeholder="Name"
+                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCloseTagPhoto}
+                            className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartTagPhoto(photo.id)}
+                        className="mt-1 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Tag someone
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
