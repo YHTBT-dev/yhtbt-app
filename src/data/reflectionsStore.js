@@ -1,15 +1,19 @@
+import { deleteExperiencePhoto } from "@/lib/supabase";
+
 const STORAGE_KEY = "yhtbt:reflections";
 
-// PLACEHOLDER STORAGE: an optional reflection photo is stored as a base64
-// data URL directly on the entry — same approach (and the same tradeoffs)
-// as elsewhere in this app; see photosStore.js.
+// The reflection *record* still lives here in localStorage. photo now
+// holds a real Supabase Storage public URL (uploaded by the caller — see
+// handleReflectionPhotoFileChange in /experiences/[id]/page.tsx — before
+// addReflection() is called), same migration as photosStore.js.
 
 // Entry shape: { id, experienceId, promptId, promptText, responseText,
 // photo, guestName, taggedGuests, createdAt, hidden }. photo is an
-// optional base64 data URL (null if none). taggedGuests is an array of
-// guest names (may be empty). hidden is a soft-delete flag for host
-// moderation — a hidden entry is excluded from getReflections entirely,
-// but the record itself isn't destroyed.
+// optional Supabase Storage public URL (null if none). taggedGuests is an
+// array of guest names (may be empty). hidden is a soft-delete flag for
+// host moderation — a hidden entry is excluded from getReflections
+// entirely, but the record (and its photo file) isn't destroyed, so
+// un-hiding it later would still work.
 //
 // guestName is no longer collected on submission (removed from the form,
 // matching how Updates has never asked for one) — new entries are saved
@@ -125,9 +129,22 @@ export function hideReflection(id) {
 }
 
 // Removes every reflection for an experience — used when the experience
-// itself is deleted, so nothing is left orphaned.
-export function deleteAllForExperience(experienceId) {
+// itself is deleted, so nothing is left orphaned, including each
+// reflection's photo file in Supabase Storage (hideReflection, above,
+// deliberately does NOT do this — soft-deleted reflections stay
+// reversible, photo included).
+export async function deleteAllForExperience(experienceId) {
   const reflections = getAllReflections();
+  const reflectionsToDelete = reflections.filter(
+    (reflection) => reflection.experienceId === experienceId
+  );
+
+  await Promise.all(
+    reflectionsToDelete
+      .filter((reflection) => reflection.photo)
+      .map((reflection) => deleteExperiencePhoto(reflection.photo))
+  );
+
   const updatedReflections = reflections.filter(
     (reflection) => reflection.experienceId !== experienceId
   );

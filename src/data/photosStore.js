@@ -1,13 +1,17 @@
+import { deleteExperiencePhoto } from "@/lib/supabase";
+
 const STORAGE_KEY = "yhtbt:photos";
 
-// PLACEHOLDER STORAGE: uploaded images are stored as base64 data URLs
-// directly in localStorage. This is NOT a real photo storage solution —
-// localStorage has strict per-origin size limits (typically ~5-10MB total)
-// and this will break down once there are more than a handful of real
-// photos. Once real cloud storage exists (e.g. Supabase Storage), uploads
-// should go there instead, and this store should hold just a URL/reference
-// rather than the raw image data.
-
+// The photo *record* (tags, itinerary link, timestamp) lives here in
+// localStorage, same as before — only the actual image file has moved.
+// dataUrl now holds a real Supabase Storage public URL, uploaded by the
+// caller (see handlePhotoFileChange in /experiences/[id]/page.tsx)
+// *before* addPhoto() is called; this store never uploads or reads image
+// bytes itself. The name "dataUrl" is unchanged from before the
+// migration — same field, now pointing at a hosted URL instead of a
+// base64 string, rather than a rename that would've meant updating every
+// existing photo record too.
+//
 // Photo shape: { id, experienceId, dataUrl, taggedNames, itineraryItemId,
 // timestamp }. taggedNames is an array of guest names tagged in the photo
 // (may be empty). itineraryItemId optionally links the photo to a specific
@@ -144,17 +148,38 @@ export function setPhotoItineraryItem(photoId, itineraryItemId) {
   return updatedPhoto;
 }
 
-export function deletePhoto(photoId) {
+// Async now — also deletes the actual image file from Supabase Storage,
+// not just the local record, so deleted photos don't pile up as orphaned
+// files nobody can see anymore. The local record is still removed even
+// if the Storage delete fails (e.g. offline), so a stuck record can't
+// block the rest of the UI; the failure is only logged (see
+// deleteExperiencePhoto in @/lib/supabase).
+export async function deletePhoto(photoId) {
   const photos = getAllPhotos();
-  const updatedPhotos = photos.filter((photo) => photo.id !== photoId);
+  const photo = photos.find((item) => item.id === photoId);
+  if (photo?.dataUrl) {
+    await deleteExperiencePhoto(photo.dataUrl);
+  }
+
+  const updatedPhotos = photos.filter((item) => item.id !== photoId);
   writeToStorage(updatedPhotos);
 }
 
 // Removes every photo for an experience — used when the experience itself
-// is deleted, so nothing is left orphaned. This is also where the most
-// localStorage space gets freed, since photos are stored as base64.
-export function deleteAllForExperience(experienceId) {
+// is deleted, so nothing is left orphaned, including each photo's file in
+// Supabase Storage.
+export async function deleteAllForExperience(experienceId) {
   const photos = getAllPhotos();
+  const photosToDelete = photos.filter(
+    (photo) => photo.experienceId === experienceId
+  );
+
+  await Promise.all(
+    photosToDelete
+      .filter((photo) => photo.dataUrl)
+      .map((photo) => deleteExperiencePhoto(photo.dataUrl))
+  );
+
   const updatedPhotos = photos.filter(
     (photo) => photo.experienceId !== experienceId
   );

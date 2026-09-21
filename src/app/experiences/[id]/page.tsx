@@ -55,7 +55,8 @@ import {
   groupByDate,
   parseLocalDate,
 } from "@/lib/format";
-import { compressImageFile } from "@/lib/compressImage";
+import { compressImageToBlob } from "@/lib/compressImage";
+import { deleteExperiencePhoto, uploadExperiencePhoto } from "@/lib/supabase";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -553,7 +554,7 @@ export default function ExperienceDetailPage() {
     setDeleteConfirmationInput("");
   }
 
-  function handleConfirmDelete() {
+  async function handleConfirmDelete() {
     if (!experience) return;
 
     const matches =
@@ -563,7 +564,7 @@ export default function ExperienceDetailPage() {
 
     setIsDeleting(true);
     sessionStorage.setItem("justDeleted", experience.name);
-    deleteExperienceCompletely(params.id);
+    await deleteExperienceCompletely(params.id);
     router.push("/experiences");
   }
 
@@ -695,10 +696,10 @@ export default function ExperienceDetailPage() {
     }
   }
 
-  function handleDeletePhoto(photoId: number) {
+  async function handleDeletePhoto(photoId: number) {
     if (!window.confirm("Delete this photo? This can't be undone.")) return;
 
-    deletePhoto(photoId);
+    await deletePhoto(photoId);
     setPhotos((current) => current.filter((photo) => photo.id !== photoId));
     if (taggingPhotoId === photoId) {
       setTaggingPhotoId(null);
@@ -737,17 +738,18 @@ export default function ExperienceDetailPage() {
 
     try {
       // Compressed first (resized + re-encoded as JPEG) so the size limit
-      // below is checked against what actually gets stored, not the
+      // and the actual upload are both against what gets stored, not the
       // original file — a typical phone photo well over 2MB raw usually
       // compresses down comfortably under it.
-      const dataUrl = await compressImageFile(file);
+      const blob = await compressImageToBlob(file);
 
-      if (dataUrl.length > MAX_PHOTO_SIZE_BYTES) {
+      if (blob.size > MAX_PHOTO_SIZE_BYTES) {
         setPhotoUploadError("Photo is too large even after compression.");
         input.value = "";
         return;
       }
 
+      const dataUrl = await uploadExperiencePhoto(params.id, blob);
       const newPhoto = addPhoto({
         experienceId: params.id,
         dataUrl,
@@ -756,7 +758,7 @@ export default function ExperienceDetailPage() {
       setPhotos((current) => [newPhoto, ...current]);
       input.value = "";
     } catch {
-      setPhotoUploadError("Could not process that image. Try a different file.");
+      setPhotoUploadError("Could not upload that photo. Try again.");
       input.value = "";
     }
   }
@@ -771,9 +773,9 @@ export default function ExperienceDetailPage() {
     setReflectionPhotoError("");
 
     try {
-      const dataUrl = await compressImageFile(file);
+      const blob = await compressImageToBlob(file);
 
-      if (dataUrl.length > MAX_PHOTO_SIZE_BYTES) {
+      if (blob.size > MAX_PHOTO_SIZE_BYTES) {
         setReflectionPhotoError(
           "Photo is too large even after compression."
         );
@@ -781,12 +783,19 @@ export default function ExperienceDetailPage() {
         return;
       }
 
-      setReflectionPhoto(dataUrl);
+      const uploadedUrl = await uploadExperiencePhoto(params.id, blob);
+
+      // Replacing an already-uploaded (but not yet submitted) selection —
+      // that previous upload would otherwise become an orphaned file in
+      // Storage, since nothing ever attaches it to a saved reflection.
+      if (reflectionPhoto) {
+        void deleteExperiencePhoto(reflectionPhoto);
+      }
+
+      setReflectionPhoto(uploadedUrl);
       input.value = "";
     } catch {
-      setReflectionPhotoError(
-        "Could not process that image. Try a different file."
-      );
+      setReflectionPhotoError("Could not upload that photo. Try again.");
       input.value = "";
     }
   }
@@ -866,6 +875,14 @@ export default function ExperienceDetailPage() {
   }
 
   function handleCloseReflectionModal() {
+    // Abandoning the form after a photo was already uploaded (upload
+    // happens immediately on file selection, before the reflection
+    // itself is ever saved) — without this, that file would be orphaned
+    // in Storage with nothing ever pointing at it.
+    if (reflectionPhoto) {
+      void deleteExperiencePhoto(reflectionPhoto);
+    }
+
     setIsReflectionModalOpen(false);
     setReflectionPromptId(REFLECTION_PROMPTS[0].id);
     setReflectionCustomPromptText("");
@@ -3173,7 +3190,10 @@ export default function ExperienceDetailPage() {
                   {reflectionPhoto ? (
                     <button
                       type="button"
-                      onClick={() => setReflectionPhoto("")}
+                      onClick={() => {
+                        void deleteExperiencePhoto(reflectionPhoto);
+                        setReflectionPhoto("");
+                      }}
                       className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
                     >
                       Remove

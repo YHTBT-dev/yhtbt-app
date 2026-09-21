@@ -19,16 +19,19 @@ import { deleteAllForExperience as deleteAllBookOrders } from "@/data/bookOrders
 // experienceId should be the string form (as used everywhere else, e.g.
 // route params) — it's converted to a number only for the experiencesStore
 // call, which stores ids numerically.
-export function deleteExperienceCompletely(experienceId) {
+//
+// Async because deleteAllPhotos/deleteAllReflections also delete each
+// photo's file from Supabase Storage, not just the local record.
+export async function deleteExperienceCompletely(experienceId) {
   deleteAllItineraryItems(experienceId);
   deleteAllGuests(experienceId);
   deleteAllTravelDetails(experienceId);
-  deleteAllPhotos(experienceId);
+  await deleteAllPhotos(experienceId);
   deleteAllFaqs(experienceId);
   deleteAllPolls(experienceId);
   deleteAllUpdates(experienceId);
   deleteNoteForExperience(experienceId);
-  deleteAllReflections(experienceId);
+  await deleteAllReflections(experienceId);
   deleteAllBookOrders(experienceId);
   deleteExperience(Number(experienceId));
 }

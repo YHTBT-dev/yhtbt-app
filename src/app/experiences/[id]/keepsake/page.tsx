@@ -85,6 +85,13 @@ function getImageMimeType(dataUrl: string) {
 // this only affects the file generated at download time, from this page.
 async function downloadWatermarkedPhoto(photoDataUrl: string, filename: string) {
   const image = new Image();
+  // Photos are now hosted on Supabase Storage rather than base64 data
+  // URLs, so this is a cross-origin image — without requesting it
+  // anonymously, drawing it to the canvas below would "taint" the
+  // canvas and canvas.toBlob() would throw a SecurityError instead of
+  // producing a file. Supabase Storage's public objects serve permissive
+  // CORS headers, so this succeeds without any bucket-side config.
+  image.crossOrigin = "anonymous";
   image.src = photoDataUrl;
   await new Promise<void>((resolve, reject) => {
     image.onload = () => resolve();

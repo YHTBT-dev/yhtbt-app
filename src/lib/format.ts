@@ -136,13 +136,26 @@ export function sanitizeForFilename(value: string) {
     .replace(/\s+/g, "-");
 }
 
-export function getPhotoFileExtension(dataUrl: string) {
-  const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
-  const subtype = match?.[1]?.toLowerCase();
-  if (subtype === "jpeg" || subtype === "jpg") return "jpg";
-  if (subtype === "png") return "png";
-  if (subtype === "gif") return "gif";
-  if (subtype === "webp") return "webp";
+// Accepts either a base64 data URL (older photo records, from before
+// photos moved to Supabase Storage) or a real hosted URL (current ones —
+// always .jpg in practice, since uploads are compressed to JPEG before
+// storage, but this still checks the URL's own extension rather than
+// assuming that).
+export function getPhotoFileExtension(url: string) {
+  const dataUrlMatch = url.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
+  const dataUrlSubtype = dataUrlMatch?.[1]?.toLowerCase();
+  if (dataUrlSubtype === "jpeg" || dataUrlSubtype === "jpg") return "jpg";
+  if (dataUrlSubtype === "png") return "png";
+  if (dataUrlSubtype === "gif") return "gif";
+  if (dataUrlSubtype === "webp") return "webp";
+
+  const pathExtensionMatch = url.match(/\.([a-zA-Z0-9]+)(?:\?.*)?$/);
+  const pathExtension = pathExtensionMatch?.[1]?.toLowerCase();
+  if (pathExtension === "jpg" || pathExtension === "jpeg") return "jpg";
+  if (pathExtension === "png") return "png";
+  if (pathExtension === "gif") return "gif";
+  if (pathExtension === "webp") return "webp";
+
   return "jpg";
 }
 
