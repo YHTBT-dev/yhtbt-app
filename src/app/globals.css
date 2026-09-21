@@ -202,13 +202,15 @@ body {
 
 .note-editor .ql-toolbar.ql-snow {
   border: none;
-  border-bottom: 1px solid rgba(27, 26, 23, 0.1);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
   padding: 0 0 0.5rem;
 }
 
 .note-editor .ql-container.ql-snow {
   border: none;
   font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 .note-editor .ql-editor {
@@ -216,7 +218,8 @@ body {
   padding: 0.75rem 0;
   font-size: 1.125rem;
   font-weight: 400;
-  color: var(--foreground);
+  background-color: var(--color-bg);
+  color: var(--color-text) !important;
 }
 
 .note-editor .ql-editor.ql-blank::before {
@@ -227,11 +230,11 @@ body {
 }
 
 .note-editor .ql-snow .ql-stroke {
-  stroke: rgba(27, 26, 23, 0.5);
+  stroke: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .note-editor .ql-snow .ql-fill {
-  fill: rgba(27, 26, 23, 0.5);
+  fill: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .note-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
