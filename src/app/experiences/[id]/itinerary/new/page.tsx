@@ -7,9 +7,21 @@ import { getExperiences } from "@/data/experiencesStore";
 import { addItineraryItem } from "@/data/itineraryStore";
 
 const FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 
 const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
+
+const DRESS_CODE_PRESETS = [
+  "Casual",
+  "Smart Casual",
+  "Cocktail",
+  "Black Tie",
+  "Beach Formal",
+  "Athletic/Active",
+  "Costume/Theme",
+];
+
+const DRESS_CODE_OTHER = "Other";
 
 type Experience = {
   id: number;
@@ -27,8 +39,12 @@ export default function NewItineraryItemPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
-  const [dressCode, setDressCode] = useState("");
+  const [dressCodeOption, setDressCodeOption] = useState("");
+  const [dressCodeOther, setDressCodeOther] = useState("");
   const [error, setError] = useState("");
+
+  const dressCode =
+    dressCodeOption === DRESS_CODE_OTHER ? dressCodeOther : dressCodeOption;
 
   useEffect(() => {
     const experiences = getExperiences();
@@ -153,13 +169,28 @@ export default function NewItineraryItemPage() {
 
           <label className="block">
             <span className={LABEL_CLASSES}>Dress Code (Optional)</span>
-            <input
-              type="text"
-              value={dressCode}
-              onChange={(event) => setDressCode(event.target.value)}
-              placeholder="Cocktail attire"
+            <select
+              value={dressCodeOption}
+              onChange={(event) => setDressCodeOption(event.target.value)}
               className={FIELD_CLASSES}
-            />
+            >
+              <option value="">None</option>
+              {DRESS_CODE_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {preset}
+                </option>
+              ))}
+              <option value={DRESS_CODE_OTHER}>{DRESS_CODE_OTHER}</option>
+            </select>
+            {dressCodeOption === DRESS_CODE_OTHER ? (
+              <input
+                type="text"
+                value={dressCodeOther}
+                onChange={(event) => setDressCodeOther(event.target.value)}
+                placeholder="Describe the dress code"
+                className={`${FIELD_CLASSES} mt-3`}
+              />
+            ) : null}
           </label>
         </div>
 

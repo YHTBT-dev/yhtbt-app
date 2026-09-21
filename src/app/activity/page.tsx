@@ -50,7 +50,7 @@ export default function ActivityPage() {
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder="Search activity..."
-        className="mt-8 w-full border-b border-foreground/10 bg-transparent pb-3 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+        className="mt-8 w-full border-b border-foreground/10 bg-transparent pb-3 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
       />
 
       {filteredActivity.length === 0 ? (

@@ -206,7 +206,7 @@ type BookOrder = {
 const REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO = 100;
 const REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO = 240;
 const REFLECTION_FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 const REFLECTION_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 // Polaroid card rendering (fixed palette, rotation, tints, truncation)
 // lives in src/components/PolaroidCard.tsx, shared with the keepsake page.
@@ -260,7 +260,7 @@ const TRAVEL_DETAIL_GROUPS: {
 ];
 
 const TRAVEL_FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 const TRAVEL_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 function formatSingleDate(dateString: string | undefined) {
@@ -1086,6 +1086,22 @@ export default function ExperienceDetailPage() {
     setIsTravelDetailModalOpen(false);
   }
 
+  function handleOpenTravelDetailModal() {
+    // Default to the Experience's own start date rather than today —
+    // travel days reasonably fall a day or so before/after the
+    // Experience itself (arrival/departure travel), so this is only a
+    // starting point, not a restriction: unlike itinerary item dates,
+    // these fields have no min/max and stay freely adjustable either
+    // direction. Routed through handleCheckInDateChange so check-out
+    // still auto-syncs to check-in + 1 day, same as a manual edit would.
+    if (experience) {
+      setDepartureDate(experience.startDate);
+      setArrivalDate(experience.startDate);
+      handleCheckInDateChange(experience.startDate);
+    }
+    setIsTravelDetailModalOpen(true);
+  }
+
   function handleCloseTravelDetailModal() {
     setIsTravelDetailModalOpen(false);
     setFlightGuestName("");
@@ -1497,7 +1513,7 @@ export default function ExperienceDetailPage() {
                   value={updateMessage}
                   onChange={(event) => setUpdateMessage(event.target.value)}
                   placeholder="The dinner start time moved to 7pm..."
-                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                 />
               </label>
 
@@ -1582,7 +1598,7 @@ export default function ExperienceDetailPage() {
                     value={faqQuestion}
                     onChange={(event) => setFaqQuestion(event.target.value)}
                     placeholder="Is there parking on site?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
@@ -1595,7 +1611,7 @@ export default function ExperienceDetailPage() {
                     rows={3}
                     value={faqAnswer}
                     onChange={(event) => setFaqAnswer(event.target.value)}
-                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
@@ -1622,7 +1638,7 @@ export default function ExperienceDetailPage() {
                     <p className="font-serif text-lg text-foreground">
                       {faq.question}
                     </p>
-                    <p className="mt-1 text-sm text-foreground/60">
+                    <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
                       {faq.answer}
                     </p>
                   </div>
@@ -1675,7 +1691,7 @@ export default function ExperienceDetailPage() {
                     value={pollQuestion}
                     onChange={(event) => setPollQuestion(event.target.value)}
                     placeholder="Where should we go for the group dinner?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
@@ -1693,7 +1709,7 @@ export default function ExperienceDetailPage() {
                         handlePollOptionChange(index, event.target.value)
                       }
                       placeholder={`Option ${index + 1}`}
-                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                     />
                   ))}
 
@@ -1841,7 +1857,7 @@ export default function ExperienceDetailPage() {
                 value={guestName}
                 onChange={(event) => setGuestName(event.target.value)}
                 placeholder="Jamie Rivera"
-                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
               />
             </label>
 
@@ -1855,7 +1871,7 @@ export default function ExperienceDetailPage() {
                 value={guestEmail}
                 onChange={(event) => setGuestEmail(event.target.value)}
                 placeholder="jamie@example.com"
-                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
               />
             </label>
 
@@ -1991,7 +2007,7 @@ export default function ExperienceDetailPage() {
         <div className="mt-6 flex justify-end">
           <button
             type="button"
-            onClick={() => setIsTravelDetailModalOpen(true)}
+            onClick={handleOpenTravelDetailModal}
             className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
           >
             Add Travel Detail
@@ -2987,7 +3003,7 @@ export default function ExperienceDetailPage() {
                               }
                             }}
                             placeholder="Name"
-                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                           />
                           <button
                             type="button"
@@ -3163,7 +3179,7 @@ export default function ExperienceDetailPage() {
                   }
                   rows={3}
                   placeholder="Share your reflection..."
-                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                 />
               </label>
 

@@ -19,7 +19,7 @@ import {
 } from "@/lib/format";
 
 const BOOK_ORDER_FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 const BOOK_ORDER_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type Experience = {

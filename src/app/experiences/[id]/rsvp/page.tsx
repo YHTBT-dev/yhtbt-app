@@ -133,7 +133,7 @@ export default function RsvpPage() {
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Jamie Rivera"
-            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
           />
         </label>
 

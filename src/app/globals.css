@@ -16,17 +16,22 @@
    Declaring the mapping inside every [data-theme] block means it
    recomputes for whichever element (and subtree) the attribute is on.
    --color-text-secondary is registered as the "muted" Tailwind color
-   (text-muted, placeholder:text-muted) below, used for the dominant
-   secondary-text convention across the app (labels, empty states,
-   captions, placeholders — what used to be text-foreground/50 and
-   placeholder:text-foreground/40). Other opacity levels on foreground
-   (/60, /70, /15, /10, /5 for borders and subtle fills) are left as-is —
-   they're already theme-correct (opacity of whatever --foreground
-   currently is), just not funneled through this one named token. */
+   (text-muted) below, used for the dominant secondary-text convention
+   across the app (labels, empty states, captions — what used to be
+   text-foreground/50). --color-placeholder is registered as
+   "placeholder" (placeholder:text-placeholder) — its own, dedicated
+   token rather than reusing muted, deliberately a lower opacity than
+   --color-text-secondary in every theme, so a placeholder reads as
+   fainter than real secondary/caption text, not the same weight as it.
+   Other opacity levels on foreground (/60, /70, /15, /10, /5 for
+   borders and subtle fills) are left as-is — they're already
+   theme-correct (opacity of whatever --foreground currently is), just
+   not funneled through a named token. */
 [data-theme="editorial-classic"] {
   --color-bg: #f6f3ec;
   --color-text: #1b1a17;
   --color-text-secondary: rgba(27, 26, 23, 0.6);
+  --color-placeholder: rgba(27, 26, 23, 0.4);
   --color-accent: #8a3b2b;
   --font-heading: var(--font-fraunces), Georgia, serif;
   --font-body: var(--font-work-sans), ui-sans-serif, system-ui, sans-serif;
@@ -34,6 +39,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Starter drop — three additional moods alongside the default, still
@@ -49,6 +55,7 @@
   --color-bg: #14161a;
   --color-text: #ece7dd;
   --color-text-secondary: rgba(236, 231, 221, 0.6);
+  --color-placeholder: rgba(236, 231, 221, 0.45);
   --color-accent: #b08968;
   --font-heading: "Newsreader", Georgia, serif;
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -56,6 +63,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Conservatory — a quiet botanical palette: soft sage-stone, deep forest
@@ -64,6 +72,7 @@
   --color-bg: #eef0e6;
   --color-text: #232a21;
   --color-text-secondary: rgba(35, 42, 33, 0.6);
+  --color-placeholder: rgba(35, 42, 33, 0.4);
   --color-accent: #5c6b47;
   --font-heading: "Cormorant Garamond", Georgia, serif;
   --font-body: "Karla", ui-sans-serif, system-ui, sans-serif;
@@ -71,6 +80,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Terra Rosa — sunlit warmth: sandy blush, deep umber text, an ochre-gold
@@ -80,6 +90,7 @@
   --color-bg: #f6e9dd;
   --color-text: #3a2418;
   --color-text-secondary: rgba(58, 36, 24, 0.6);
+  --color-placeholder: rgba(58, 36, 24, 0.4);
   --color-accent: #b3752e;
   --font-heading: "Playfair Display", Georgia, serif;
   --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
@@ -87,6 +98,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Coastal Light and Midnight Edition, below, are loaded via next/font (see
@@ -99,6 +111,7 @@
   --color-bg: #f1f5f4;
   --color-text: #1e2a2e;
   --color-text-secondary: rgba(30, 42, 46, 0.6);
+  --color-placeholder: rgba(30, 42, 46, 0.4);
   --color-accent: #3b6e71;
   --font-heading: var(--font-cormorant-garamond), serif;
   --font-body: var(--font-karla), sans-serif;
@@ -106,6 +119,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Midnight Edition — a genuine dark theme, not a palette-swapped light one:
@@ -124,6 +138,7 @@
   --color-bg: #1c1b1e;
   --color-text: #f1ede4;
   --color-text-secondary: rgba(241, 237, 228, 0.7);
+  --color-placeholder: rgba(241, 237, 228, 0.5);
   --color-accent: #b08d57;
   --font-heading: var(--font-bodoni-moda), serif;
   --font-body: var(--font-jost), sans-serif;
@@ -131,6 +146,7 @@
   --foreground: var(--color-text);
   --accent: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
+  --text-placeholder: var(--color-placeholder);
 }
 
 /* Midnight Edition's own typography rules — pushed deliberately further
@@ -174,6 +190,7 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-muted: var(--text-secondary);
+  --color-placeholder: var(--text-placeholder);
   --font-sans: var(--font-body);
   --font-serif: var(--font-heading);
 }
@@ -205,7 +222,8 @@ body {
 .note-editor .ql-editor.ql-blank::before {
   left: 0;
   font-style: italic;
-  color: rgba(27, 26, 23, 0.4);
+  font-size: 0.9em;
+  color: var(--color-placeholder);
 }
 
 .note-editor .ql-snow .ql-stroke {
