@@ -31,11 +31,14 @@ import {
   setPhotoTags,
 } from "@/data/photosStore";
 import {
+  addMyReflectionId,
   addReflection,
+  getMyReflectionIds,
   getReflections,
   hideReflection,
   OPEN_ENDED_REFLECTION_PROMPT_ID,
   REFLECTION_PROMPTS,
+  updateReflection,
 } from "@/data/reflectionsStore";
 import {
   BOOK_ORDER_STATUSES,
@@ -182,6 +185,7 @@ type Reflection = {
   taggedGuests: string[];
   createdAt: string;
   hidden: boolean;
+  editedAt: string | null;
 };
 
 type BookOrder = {
@@ -459,6 +463,17 @@ export default function ExperienceDetailPage() {
   const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
   const [expandedReflection, setExpandedReflection] =
     useState<Reflection | null>(null);
+  const [editingReflectionId, setEditingReflectionId] = useState<
+    number | null
+  >(null);
+  // The photo the reflection being edited had when the modal opened —
+  // distinct from reflectionPhoto (the form's current working value) so
+  // handleCloseReflectionModal and the photo Replace/Remove controls can
+  // tell a freshly-uploaded scratch file (safe to delete immediately) apart
+  // from the original, still-persisted photo (must not be deleted from
+  // Storage until the edit is actually saved). "" for a new reflection.
+  const [reflectionOriginalPhoto, setReflectionOriginalPhoto] = useState("");
+  const [myReflectionIds, setMyReflectionIds] = useState<number[]>([]);
   const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
@@ -530,6 +545,7 @@ export default function ExperienceDetailPage() {
     setVotedPollIds(getVotedPollIds());
     setPhotos(getPhotos(params.id));
     setReflections(getReflections(params.id));
+    setMyReflectionIds(getMyReflectionIds());
     setBookOrders(getBookOrders(params.id));
   }, [params.id]);
 
@@ -788,7 +804,12 @@ export default function ExperienceDetailPage() {
       // Replacing an already-uploaded (but not yet submitted) selection —
       // that previous upload would otherwise become an orphaned file in
       // Storage, since nothing ever attaches it to a saved reflection.
-      if (reflectionPhoto) {
+      // EXCEPT when the photo being replaced is the original photo of a
+      // reflection under edit (reflectionPhoto === reflectionOriginalPhoto)
+      // — that file is still referenced by the persisted entry until the
+      // edit is actually saved, so it's deleted then instead (see
+      // handleSubmitReflection), not here.
+      if (reflectionPhoto && reflectionPhoto !== reflectionOriginalPhoto) {
         void deleteExperiencePhoto(reflectionPhoto);
       }
 
@@ -850,20 +871,55 @@ export default function ExperienceDetailPage() {
 
     setReflectionError("");
 
-    const newReflection = addReflection({
-      experienceId: params.id,
-      promptId: reflectionPromptId,
-      promptText,
-      responseText: reflectionResponseText.trim(),
-      photo: reflectionPhoto || null,
-      // Unattributed for now, same as Updates — see the FUTURE note in
-      // reflectionsStore.js.
-      guestName: "",
-      taggedGuests: reflectionTaggedGuests,
-    });
-    console.log("[handleSubmitReflection] saved reflection:", newReflection);
+    if (editingReflectionId) {
+      const updated = updateReflection(editingReflectionId, {
+        promptId: reflectionPromptId,
+        promptText,
+        responseText: reflectionResponseText.trim(),
+        photo: reflectionPhoto || null,
+        taggedGuests: reflectionTaggedGuests,
+      }) as Reflection | null;
+      console.log("[handleSubmitReflection] updated reflection:", updated);
 
-    setReflections((current) => [newReflection, ...current]);
+      // The original photo is only safe to delete now — the edit is
+      // actually committed, so the record no longer points at it (it was
+      // replaced or removed during this edit).
+      if (
+        updated &&
+        reflectionOriginalPhoto &&
+        reflectionOriginalPhoto !== (reflectionPhoto || "")
+      ) {
+        void deleteExperiencePhoto(reflectionOriginalPhoto);
+      }
+
+      if (updated) {
+        setReflections((current) =>
+          current.map((reflection) =>
+            reflection.id === updated.id ? updated : reflection
+          )
+        );
+      }
+    } else {
+      const newReflection = addReflection({
+        experienceId: params.id,
+        promptId: reflectionPromptId,
+        promptText,
+        responseText: reflectionResponseText.trim(),
+        photo: reflectionPhoto || null,
+        // Unattributed for now, same as Updates — see the FUTURE note in
+        // reflectionsStore.js.
+        guestName: "",
+        taggedGuests: reflectionTaggedGuests,
+      });
+      console.log("[handleSubmitReflection] saved reflection:", newReflection);
+
+      addMyReflectionId(newReflection.id);
+      setMyReflectionIds((current) => [...current, newReflection.id]);
+      setReflections((current) => [newReflection, ...current]);
+    }
+
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
     setReflectionPromptId(REFLECTION_PROMPTS[0].id);
     setReflectionCustomPromptText("");
     setReflectionResponseText("");
@@ -878,12 +934,17 @@ export default function ExperienceDetailPage() {
     // Abandoning the form after a photo was already uploaded (upload
     // happens immediately on file selection, before the reflection
     // itself is ever saved) — without this, that file would be orphaned
-    // in Storage with nothing ever pointing at it.
-    if (reflectionPhoto) {
+    // in Storage with nothing ever pointing at it. Never deletes
+    // reflectionOriginalPhoto here: when editing, that file is still the
+    // one the persisted entry actually references until a save commits a
+    // different one, so closing without saving must leave it alone.
+    if (reflectionPhoto && reflectionPhoto !== reflectionOriginalPhoto) {
       void deleteExperiencePhoto(reflectionPhoto);
     }
 
     setIsReflectionModalOpen(false);
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
     setReflectionPromptId(REFLECTION_PROMPTS[0].id);
     setReflectionCustomPromptText("");
     setReflectionResponseText("");
@@ -892,6 +953,30 @@ export default function ExperienceDetailPage() {
     setReflectionTagInput("");
     setReflectionTaggedGuests([]);
     setReflectionError("");
+  }
+
+  function handleOpenNewReflectionModal() {
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
+    setIsReflectionModalOpen(true);
+  }
+
+  function handleOpenEditReflectionModal(reflection: Reflection) {
+    setEditingReflectionId(reflection.id);
+    setReflectionPromptId(reflection.promptId);
+    setReflectionCustomPromptText(
+      reflection.promptId === OPEN_ENDED_REFLECTION_PROMPT_ID
+        ? reflection.promptText
+        : ""
+    );
+    setReflectionResponseText(reflection.responseText);
+    setReflectionPhoto(reflection.photo ?? "");
+    setReflectionOriginalPhoto(reflection.photo ?? "");
+    setReflectionPhotoError("");
+    setReflectionTagInput("");
+    setReflectionTaggedGuests(reflection.taggedGuests);
+    setReflectionError("");
+    setIsReflectionModalOpen(true);
   }
 
   function handleToggleReflectionsEnabled() {
@@ -3107,7 +3192,7 @@ export default function ExperienceDetailPage() {
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
-                onClick={() => setIsReflectionModalOpen(true)}
+                onClick={handleOpenNewReflectionModal}
                 className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
               >
                 Share a Reflection
@@ -3117,7 +3202,7 @@ export default function ExperienceDetailPage() {
             <Modal
               isOpen={isReflectionModalOpen}
               onClose={handleCloseReflectionModal}
-              title="Share a Reflection"
+              title={editingReflectionId ? "Edit Reflection" : "Share a Reflection"}
               maxWidthClassName="max-w-2xl"
             >
             <form
@@ -3207,7 +3292,14 @@ export default function ExperienceDetailPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        void deleteExperiencePhoto(reflectionPhoto);
+                        // Only the original photo of a reflection under
+                        // edit is spared here — it's still referenced by
+                        // the persisted entry until the edit is saved (see
+                        // handleSubmitReflection), so removing it in the
+                        // form must not delete it from Storage yet.
+                        if (reflectionPhoto !== reflectionOriginalPhoto) {
+                          void deleteExperiencePhoto(reflectionPhoto);
+                        }
                         setReflectionPhoto("");
                       }}
                       className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
@@ -3282,7 +3374,7 @@ export default function ExperienceDetailPage() {
                 type="submit"
                 className="self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
               >
-                Submit Reflection
+                {editingReflectionId ? "Save Changes" : "Submit Reflection"}
               </button>
             </form>
             </Modal>
@@ -3298,6 +3390,8 @@ export default function ExperienceDetailPage() {
                     <PolaroidCard
                       reflection={reflection}
                       onExpand={setExpandedReflection}
+                      canEdit={myReflectionIds.includes(reflection.id)}
+                      onEdit={handleOpenEditReflectionModal}
                       onDelete={
                         isPreviewingAsGuest ? undefined : handleHideReflection
                       }

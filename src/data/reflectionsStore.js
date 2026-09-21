@@ -1,6 +1,7 @@
 import { deleteExperiencePhoto } from "@/lib/supabase";
 
 const STORAGE_KEY = "yhtbt:reflections";
+const MY_REFLECTION_IDS_KEY = "myReflectionIds";
 
 // The reflection *record* still lives here in localStorage. photo now
 // holds a real Supabase Storage public URL (uploaded by the caller — see
@@ -74,12 +75,16 @@ function getAllReflections() {
   return readFromStorage();
 }
 
-// Entries from before taggedGuests/hidden existed may not have them.
+// Entries from before taggedGuests/hidden/editedAt existed may not have
+// them. editedAt is null until updateReflection() touches the entry, and
+// stays set thereafter (even through further edits) — the feed only needs
+// to know "has this ever been revised", not track edit history.
 function normalizeReflection(reflection) {
   return {
     ...reflection,
     taggedGuests: reflection.taggedGuests ?? [],
     hidden: reflection.hidden ?? false,
+    editedAt: reflection.editedAt ?? null,
   };
 }
 
@@ -109,6 +114,29 @@ export function addReflection(reflection) {
 
   writeToStorage(updatedReflections);
   return newReflection;
+}
+
+// Self-editing (see handleSubmitReflection in /experiences/[id]/page.tsx):
+// only fields the submitter controls are ever passed in updates (promptId,
+// promptText, responseText, photo, taggedGuests) — id, experienceId, and
+// createdAt are never touched, so an edit revises the entry in place
+// without disturbing when it was originally posted or its ownership.
+export function updateReflection(id, updates) {
+  const reflections = getAllReflections();
+  let updatedReflection = null;
+
+  const updatedReflections = reflections.map((reflection) => {
+    if (reflection.id !== id) return reflection;
+    updatedReflection = normalizeReflection({
+      ...reflection,
+      ...updates,
+      editedAt: new Date().toISOString(),
+    });
+    return updatedReflection;
+  });
+
+  writeToStorage(updatedReflections);
+  return updatedReflection;
 }
 
 // Soft delete for host moderation — sets hidden: true rather than
@@ -149,4 +177,37 @@ export async function deleteAllForExperience(experienceId) {
     (reflection) => reflection.experienceId !== experienceId
   );
   writeToStorage(updatedReflections);
+}
+
+// Tracks which reflection ids were submitted from this browser/device, so
+// the feed can offer Edit only on entries the current visitor actually
+// wrote — the same pre-accounts, localStorage-as-identity pattern used
+// elsewhere in the app (e.g. votedPollIds), not real authentication. A
+// different browser/device never sees Edit on the same entry, and clearing
+// site data forgets ownership entirely — both accepted trade-offs of this
+// approach.
+export function getMyReflectionIds() {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.localStorage.getItem(MY_REFLECTION_IDS_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addMyReflectionId(id) {
+  if (typeof window === "undefined") return;
+
+  const current = getMyReflectionIds();
+  if (current.includes(id)) return;
+
+  window.localStorage.setItem(
+    MY_REFLECTION_IDS_KEY,
+    JSON.stringify([...current, id])
+  );
 }

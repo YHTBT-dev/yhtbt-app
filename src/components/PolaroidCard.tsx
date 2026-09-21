@@ -79,9 +79,17 @@ export type PolaroidReflection = {
   guestName: string;
   taggedGuests: string[];
   createdAt: string;
+  // Optional (rather than required) so callers with an older/narrower
+  // local Reflection type (e.g. the keepsake's read-only view, which has
+  // no use for edit state) still satisfy this generic without changes.
+  editedAt?: string | null;
 };
 
 function getAttributionLine(reflection: PolaroidReflection) {
+  const timestamp =
+    formatRelativeTime(reflection.createdAt) +
+    (reflection.editedAt ? " (edited)" : "");
+
   return [
     // Older entries may still have a name attached (collected before
     // this field was removed from the submission form); new entries are
@@ -90,7 +98,7 @@ function getAttributionLine(reflection: PolaroidReflection) {
     reflection.taggedGuests.length > 0
       ? `with ${reflection.taggedGuests.join(", ")}`
       : null,
-    formatRelativeTime(reflection.createdAt),
+    timestamp,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -105,6 +113,12 @@ type PolaroidCardProps<T extends PolaroidReflection> = {
   // Host-only moderation — omit entirely to hide the Delete control (the
   // keepsake, a read-only compiled view, doesn't pass one).
   onDelete?: (id: number) => void;
+  // Self-editing — the caller decides per-card whether this reflection
+  // belongs to the current browser (see getMyReflectionIds in
+  // reflectionsStore.js) and only then passes onEdit; canEdit alone
+  // doesn't show the button without a handler, and vice versa.
+  canEdit?: boolean;
+  onEdit?: (reflection: T) => void;
 };
 
 // Generic over the caller's own reflection type (which always has more
@@ -116,6 +130,8 @@ export function PolaroidCard<T extends PolaroidReflection>({
   rotate = true,
   onExpand,
   onDelete,
+  canEdit = false,
+  onEdit,
 }: PolaroidCardProps<T>) {
   const mainTruncated = reflection.photo
     ? null
@@ -249,23 +265,45 @@ export function PolaroidCard<T extends PolaroidReflection>({
             <p style={{ margin: 0, fontSize: "11px", color: POLAROID_MUTED }}>
               {getAttributionLine(reflection)}
             </p>
-            {onDelete ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(reflection.id);
-                }}
-                style={{
-                  fontSize: "11px",
-                  color: POLAROID_MUTED,
-                  textDecoration: "underline",
-                  textUnderlineOffset: "2px",
-                }}
-                className="shrink-0 transition-colors hover:!text-red-600"
-              >
-                Delete
-              </button>
+            {(canEdit && onEdit) || onDelete ? (
+              <div className="flex shrink-0 items-center gap-3">
+                {canEdit && onEdit ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdit(reflection);
+                    }}
+                    style={{
+                      fontSize: "11px",
+                      color: POLAROID_MUTED,
+                      textDecoration: "underline",
+                      textUnderlineOffset: "2px",
+                    }}
+                    className="transition-colors hover:!text-accent"
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                {onDelete ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(reflection.id);
+                    }}
+                    style={{
+                      fontSize: "11px",
+                      color: POLAROID_MUTED,
+                      textDecoration: "underline",
+                      textUnderlineOffset: "2px",
+                    }}
+                    className="transition-colors hover:!text-red-600"
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>
