@@ -10,6 +10,15 @@ const STORAGE_KEY = "yhtbt:reflections";
 // guest names (may be empty). hidden is a soft-delete flag for host
 // moderation — a hidden entry is excluded from getReflections entirely,
 // but the record itself isn't destroyed.
+//
+// guestName is no longer collected on submission (removed from the form,
+// matching how Updates has never asked for one) — new entries are saved
+// with guestName: "". Older entries that already have a name keep
+// displaying it; nothing strips existing data.
+//
+// FUTURE: once guest accounts exist, attribute each reflection to the
+// logged-in guest automatically (store userId, display their name from
+// the account). Until then, entries are unattributed, same as Updates.
 
 // The 6 fixed prompts. The last is open-ended — text is null, and the
 // submitter supplies their own promptText instead of picking one of these.

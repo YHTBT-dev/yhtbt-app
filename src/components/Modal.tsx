@@ -7,9 +7,19 @@ type ModalProps = {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  // Lets a specific modal opt into more room (e.g. a form with a select
+  // full of long sentence-length options) without changing every other
+  // modal's width.
+  maxWidthClassName?: string;
 };
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,7 +46,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto border border-foreground/10 bg-background p-6 sm:p-8"
+        className={`max-h-[90vh] w-full overflow-y-auto border border-foreground/10 bg-background p-6 sm:p-8 ${maxWidthClassName}`}
       >
         <div className="flex items-start justify-between gap-4">
           <h2 className="font-serif text-2xl text-foreground">{title}</h2>

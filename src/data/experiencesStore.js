@@ -27,7 +27,9 @@ function writeToStorage(experiences) {
 // before guest-count tiering existed have no "estimatedGuestCount" —
 // default to null (unknown), distinct from the real guest list built
 // later in the Guests section. Records from before theming existed have no
-// "theme" — default to the app's original look, "editorial-classic".
+// "theme" — default to the app's original look, "editorial-classic". Records
+// from before Reflections existed have no "reflectionsEnabled" — default to
+// false, since it's a host opt-in, not on by default.
 export function normalizeExperience(experience) {
   const withRoles = Array.isArray(experience.roles)
     ? experience
@@ -42,6 +44,7 @@ export function normalizeExperience(experience) {
     estimatedGuestCount: withRoles.estimatedGuestCount ?? null,
     checkoutSessionId: withRoles.checkoutSessionId ?? null,
     theme: withRoles.theme ?? "editorial-classic",
+    reflectionsEnabled: withRoles.reflectionsEnabled ?? false,
   };
 }
 
