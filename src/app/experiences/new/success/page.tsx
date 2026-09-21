@@ -59,6 +59,7 @@ function CheckoutSuccessContent() {
             location: data.location,
             roles: data.roles,
             estimatedGuestCount: data.estimatedGuestCount,
+            theme: data.theme,
             checkoutSessionId: sessionId,
             paid: true,
           });

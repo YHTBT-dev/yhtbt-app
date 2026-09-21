@@ -3,11 +3,12 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addExperience } from "@/data/experiencesStore";
+import ThemePicker from "@/components/ThemePicker";
 
 const FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
 
-const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
+const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 // Experiences at or under this estimated guest count are free — no
 // platform fee, no Stripe Checkout. Above it, the host pays the platform
@@ -22,6 +23,7 @@ export default function NewExperiencePage() {
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
   const [estimatedGuestCount, setEstimatedGuestCount] = useState("");
+  const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
   const [error, setError] = useState("");
@@ -79,8 +81,13 @@ export default function NewExperiencePage() {
         location,
         roles,
         estimatedGuestCount: guestCount,
+        theme,
         paid: false,
       });
+      console.log(
+        "[NewExperiencePage] saved experience.theme:",
+        newExperience.theme
+      );
       sessionStorage.setItem("justCreated", String(newExperience.id));
       router.push(`/experiences/${newExperience.id}`);
       return;
@@ -100,6 +107,7 @@ export default function NewExperiencePage() {
           location,
           roles,
           estimatedGuestCount: guestCount,
+          theme,
         }),
       });
 
@@ -193,6 +201,11 @@ export default function NewExperiencePage() {
         </label>
 
         <div className="flex flex-col gap-3">
+          <span className={LABEL_CLASSES}>Select your theme</span>
+          <ThemePicker value={theme} onChange={setTheme} />
+        </div>
+
+        <div className="flex flex-col gap-3">
           <span className={LABEL_CLASSES}>Your Role</span>
           <label className="flex items-center gap-3">
             <input
@@ -232,7 +245,7 @@ export default function NewExperiencePage() {
           />
         </label>
 
-        <p className="text-sm text-foreground/50 italic">
+        <p className="text-sm text-muted italic">
           {requiresPayment
             ? `Experiences over ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests require the platform tier fee. You'll be taken to a secure Stripe checkout page (test mode) next.`
             : `Experiences of ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests or fewer are free — no payment required.`}

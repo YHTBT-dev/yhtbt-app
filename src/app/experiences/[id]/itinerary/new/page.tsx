@@ -6,9 +6,9 @@ import { getExperiences } from "@/data/experiencesStore";
 import { addItineraryItem } from "@/data/itineraryStore";
 
 const FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
 
-const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
+const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type Experience = {
   id: number;

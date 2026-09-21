@@ -151,10 +151,10 @@ export default function ExperiencesPage() {
               key={tab.value}
               type="button"
               onClick={() => setActiveTab(tab.value)}
-              className={`-mb-px border-b-2 pb-3 text-sm tracking-wide uppercase transition-colors ${
+              className={`-mb-px border-b-2 px-3 pb-3 text-sm tracking-wide uppercase transition-colors ${
                 isActive
-                  ? "border-accent text-accent"
-                  : "border-transparent text-foreground/50 hover:text-accent"
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-transparent text-muted hover:text-accent"
               }`}
             >
               {tab.label}
@@ -164,7 +164,7 @@ export default function ExperiencesPage() {
       </div>
 
       {filteredExperiences.length === 0 ? (
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           No experiences yet
         </div>
       ) : (

@@ -51,7 +51,7 @@ export default function AlbumPage() {
   if (experience === null) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           Experience not found
         </div>
       </main>
@@ -80,7 +80,7 @@ export default function AlbumPage() {
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
       <Link
         href={`/experiences/${params.id}`}
-        className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+        className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         Back to {experience.name}
       </Link>
@@ -90,7 +90,7 @@ export default function AlbumPage() {
       </h1>
 
       {!hasAnyPhotos ? (
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           No photos yet
         </div>
       ) : (
@@ -99,7 +99,7 @@ export default function AlbumPage() {
             <div key={group.key}>
               <h2 className="font-serif text-2xl text-foreground">
                 {group.title}
-                <span className="ml-3 text-base text-foreground/50">
+                <span className="ml-3 text-base text-muted">
                   {formatShortDate(group.date)}
                 </span>
               </h2>
@@ -121,7 +121,7 @@ export default function AlbumPage() {
                         photo,
                         group.title
                       )}
-                      className="mt-2 inline-block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                      className="mt-2 inline-block text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                     >
                       Download
                     </a>
@@ -153,7 +153,7 @@ export default function AlbumPage() {
                         experience.name,
                         photo
                       )}
-                      className="mt-2 inline-block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                      className="mt-2 inline-block text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                     >
                       Download
                     </a>

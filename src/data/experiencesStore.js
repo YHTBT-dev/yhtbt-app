@@ -26,7 +26,8 @@ function writeToStorage(experiences) {
 // default to false rather than treating them as having paid. Records from
 // before guest-count tiering existed have no "estimatedGuestCount" —
 // default to null (unknown), distinct from the real guest list built
-// later in the Guests section.
+// later in the Guests section. Records from before theming existed have no
+// "theme" — default to the app's original look, "editorial-classic".
 export function normalizeExperience(experience) {
   const withRoles = Array.isArray(experience.roles)
     ? experience
@@ -40,6 +41,7 @@ export function normalizeExperience(experience) {
     paid: withRoles.paid ?? false,
     estimatedGuestCount: withRoles.estimatedGuestCount ?? null,
     checkoutSessionId: withRoles.checkoutSessionId ?? null,
+    theme: withRoles.theme ?? "editorial-classic",
   };
 }
 

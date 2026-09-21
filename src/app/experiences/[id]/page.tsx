@@ -204,8 +204,8 @@ const TRAVEL_DETAIL_GROUPS: {
 ];
 
 const TRAVEL_FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
-const TRAVEL_LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+const TRAVEL_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 function formatSingleDate(dateString: string | undefined) {
   const parsed = parseLocalDate(dateString);
@@ -960,7 +960,7 @@ export default function ExperienceDetailPage() {
   if (experience === null) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           Experience not found
         </div>
       </main>
@@ -1065,7 +1065,7 @@ export default function ExperienceDetailPage() {
           <button
             type="button"
             onClick={() => setIsPreviewingAsGuest((current) => !current)}
-            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
           >
             {isPreviewingAsGuest ? "Switch to Host View" : "Preview as Guest"}
           </button>
@@ -1078,7 +1078,7 @@ export default function ExperienceDetailPage() {
           {isPreviewingAsGuest ? null : (
             <Link
               href={`/experiences/${params.id}/edit`}
-              className="shrink-0 text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+              className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
             >
               Edit
             </Link>
@@ -1117,7 +1117,7 @@ export default function ExperienceDetailPage() {
           )}
 
           {groupedItinerary.length === 0 ? (
-        <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[20vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           No itinerary yet
         </div>
       ) : (
@@ -1159,7 +1159,7 @@ export default function ExperienceDetailPage() {
                         {isPreviewingAsGuest ? null : (
                         <Link
                           href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
-                          className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                         >
                           Edit
                         </Link>
@@ -1185,7 +1185,7 @@ export default function ExperienceDetailPage() {
                           href={getMapsUrl(item.location)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                         >
                           Open in Maps
                         </a>
@@ -1222,7 +1222,7 @@ export default function ExperienceDetailPage() {
               className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end"
             >
               <label className="block flex-1">
-                <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                <span className="text-sm tracking-wide text-muted uppercase">
                   New Update
                 </span>
                 <input
@@ -1231,7 +1231,7 @@ export default function ExperienceDetailPage() {
                   value={updateMessage}
                   onChange={(event) => setUpdateMessage(event.target.value)}
                   placeholder="The dinner start time moved to 7pm..."
-                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                 />
               </label>
 
@@ -1245,7 +1245,7 @@ export default function ExperienceDetailPage() {
             )}
 
             {updates.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No updates yet
               </div>
             ) : (
@@ -1305,7 +1305,7 @@ export default function ExperienceDetailPage() {
                 className="flex flex-col gap-6"
               >
                 <label className="block">
-                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  <span className="text-sm tracking-wide text-muted uppercase">
                     Question
                   </span>
                   <input
@@ -1314,12 +1314,12 @@ export default function ExperienceDetailPage() {
                     value={faqQuestion}
                     onChange={(event) => setFaqQuestion(event.target.value)}
                     placeholder="Is there parking on site?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  <span className="text-sm tracking-wide text-muted uppercase">
                     Answer
                   </span>
                   <textarea
@@ -1327,7 +1327,7 @@ export default function ExperienceDetailPage() {
                     rows={3}
                     value={faqAnswer}
                     onChange={(event) => setFaqAnswer(event.target.value)}
-                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
@@ -1341,7 +1341,7 @@ export default function ExperienceDetailPage() {
             </Modal>
 
             {faqs.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No FAQs yet
               </div>
             ) : (
@@ -1396,7 +1396,7 @@ export default function ExperienceDetailPage() {
             >
               <form onSubmit={handleAddPoll} className="flex flex-col gap-6">
                 <label className="block">
-                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  <span className="text-sm tracking-wide text-muted uppercase">
                     Question
                   </span>
                   <input
@@ -1405,12 +1405,12 @@ export default function ExperienceDetailPage() {
                     value={pollQuestion}
                     onChange={(event) => setPollQuestion(event.target.value)}
                     placeholder="Where should we go for the group dinner?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                   />
                 </label>
 
                 <div className="flex flex-col gap-4">
-                  <span className="text-sm tracking-wide text-foreground/50 uppercase">
+                  <span className="text-sm tracking-wide text-muted uppercase">
                     Options
                   </span>
                   {pollOptions.map((option, index) => (
@@ -1423,7 +1423,7 @@ export default function ExperienceDetailPage() {
                         handlePollOptionChange(index, event.target.value)
                       }
                       placeholder={`Option ${index + 1}`}
-                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                     />
                   ))}
 
@@ -1431,7 +1431,7 @@ export default function ExperienceDetailPage() {
                     <button
                       type="button"
                       onClick={handleAddPollOption}
-                      className="self-start text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                      className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
                     >
                       + Add another option
                     </button>
@@ -1448,7 +1448,7 @@ export default function ExperienceDetailPage() {
             </Modal>
 
             {polls.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No polls yet
               </div>
             ) : (
@@ -1554,7 +1554,7 @@ export default function ExperienceDetailPage() {
             className="flex flex-col gap-6"
           >
             <label className="block">
-              <span className="text-sm tracking-wide text-foreground/50 uppercase">
+              <span className="text-sm tracking-wide text-muted uppercase">
                 Name
               </span>
               <input
@@ -1563,12 +1563,12 @@ export default function ExperienceDetailPage() {
                 value={guestName}
                 onChange={(event) => setGuestName(event.target.value)}
                 placeholder="Jamie Rivera"
-                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
               />
             </label>
 
             <label className="block">
-              <span className="text-sm tracking-wide text-foreground/50 uppercase">
+              <span className="text-sm tracking-wide text-muted uppercase">
                 Email
               </span>
               <input
@@ -1577,7 +1577,7 @@ export default function ExperienceDetailPage() {
                 value={guestEmail}
                 onChange={(event) => setGuestEmail(event.target.value)}
                 placeholder="jamie@example.com"
-                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
               />
             </label>
 
@@ -1606,10 +1606,10 @@ export default function ExperienceDetailPage() {
                 key={tab.status}
                 type="button"
                 onClick={() => setGuestTab(tab.status)}
-                className={`-mb-px border-b-2 pb-3 text-sm tracking-wide uppercase transition-colors ${
+                className={`-mb-px border-b-2 px-3 pb-3 text-sm tracking-wide uppercase transition-colors ${
                   isActive
-                    ? "border-accent text-accent"
-                    : "border-transparent text-foreground/50 hover:text-accent"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-transparent text-muted hover:text-accent"
                 }`}
               >
                 {tab.label} ({count})
@@ -1633,7 +1633,7 @@ export default function ExperienceDetailPage() {
             );
 
             return confirmedGuests.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 {activeTab.emptyMessage}
               </div>
             ) : (
@@ -1656,7 +1656,7 @@ export default function ExperienceDetailPage() {
               : guests.filter((guest) => guest.rsvpStatus === guestTab);
 
           return tabGuests.length === 0 ? (
-            <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+            <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
               {activeTab.emptyMessage}
             </div>
           ) : (
@@ -2035,7 +2035,7 @@ export default function ExperienceDetailPage() {
         </Modal>
 
         {travelDetails.length === 0 ? (
-          <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+          <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
             No travel details yet
           </div>
         ) : (
@@ -2374,7 +2374,7 @@ export default function ExperienceDetailPage() {
                               <button
                                 type="button"
                                 onClick={handleCancelEditTravelDetail}
-                                className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                                className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
                               >
                                 Cancel
                               </button>
@@ -2404,7 +2404,7 @@ export default function ExperienceDetailPage() {
                             <button
                               type="button"
                               onClick={() => handleStartEditTravelDetail(entry)}
-                              className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                              className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                             >
                               Edit
                             </button>
@@ -2430,7 +2430,7 @@ export default function ExperienceDetailPage() {
                                 href={getMapsUrl(entry.address)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-1 inline-block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                                className="mt-1 inline-block text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                               >
                                 Open in Maps
                               </a>
@@ -2446,7 +2446,7 @@ export default function ExperienceDetailPage() {
                             <button
                               type="button"
                               onClick={() => handleStartEditTravelDetail(entry)}
-                              className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                              className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                             >
                               Edit
                             </button>
@@ -2479,7 +2479,7 @@ export default function ExperienceDetailPage() {
                           <button
                             type="button"
                             onClick={() => handleStartEditTravelDetail(entry)}
-                            className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                            className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                           >
                             Edit
                           </button>
@@ -2511,13 +2511,13 @@ export default function ExperienceDetailPage() {
         <div className="flex shrink-0 items-center gap-4">
           <Link
             href={`/experiences/${params.id}/album`}
-            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
           >
             View Album
           </Link>
           <Link
             href={`/experiences/${params.id}/keepsake`}
-            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
           >
             View Keepsake
           </Link>
@@ -2551,7 +2551,7 @@ export default function ExperienceDetailPage() {
             </datalist>
 
             {photos.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No photos yet
               </div>
             ) : (
@@ -2567,7 +2567,7 @@ export default function ExperienceDetailPage() {
                       />
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <p className="text-xs text-foreground/50">
+                      <p className="text-xs text-muted">
                         {formatRelativeTime(photo.timestamp)}
                       </p>
                       <div className="flex shrink-0 items-center gap-3">
@@ -2577,7 +2577,7 @@ export default function ExperienceDetailPage() {
                             experience.name,
                             photo
                           )}
-                          className="text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                         >
                           Download
                         </a>
@@ -2592,7 +2592,7 @@ export default function ExperienceDetailPage() {
                     </div>
                     {taggingPhotoId === photo.id ? null : photo.taggedNames
                         .length > 0 ? (
-                      <p className="text-xs text-foreground/50">
+                      <p className="text-xs text-muted">
                         with {photo.taggedNames.join(", ")}
                       </p>
                     ) : null}
@@ -2648,12 +2648,12 @@ export default function ExperienceDetailPage() {
                               }
                             }}
                             placeholder="Name"
-                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none"
+                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
                           />
                           <button
                             type="button"
                             onClick={handleCloseTagPhoto}
-                            className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                            className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                           >
                             Done
                           </button>
@@ -2663,7 +2663,7 @@ export default function ExperienceDetailPage() {
                       <button
                         type="button"
                         onClick={() => handleStartTagPhoto(photo.id)}
-                        className="mt-1 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        className="mt-1 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                       >
                         Tag someone
                       </button>
@@ -2691,7 +2691,7 @@ export default function ExperienceDetailPage() {
                         <button
                           type="button"
                           onClick={handleCloseLinkPhoto}
-                          className="shrink-0 text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                          className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                         >
                           Done
                         </button>
@@ -2700,7 +2700,7 @@ export default function ExperienceDetailPage() {
                       <button
                         type="button"
                         onClick={() => handleStartLinkPhoto(photo.id)}
-                        className="mt-1 block text-xs text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+                        className="mt-1 block text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
                       >
                         {(() => {
                           const linkedItem = photo.itineraryItemId
@@ -2747,7 +2747,7 @@ export default function ExperienceDetailPage() {
 
       {collapsedSections.notes ? null : (
         <>
-          <p className="mt-1 text-sm text-foreground/50 italic">
+          <p className="mt-1 text-sm text-muted italic">
             Jot down your private notes from this Experience so you can
             revisit them later
           </p>
@@ -2795,7 +2795,7 @@ export default function ExperienceDetailPage() {
         </p>
 
         <label className="mt-6 block">
-          <span className="text-sm tracking-wide text-foreground/50 uppercase">
+          <span className="text-sm tracking-wide text-muted uppercase">
             Type &quot;{experience.name}&quot; to confirm
           </span>
           <input
@@ -2828,7 +2828,7 @@ export default function ExperienceDetailPage() {
           <button
             type="button"
             onClick={handleCloseDeleteModal}
-            className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
           >
             Cancel
           </button>

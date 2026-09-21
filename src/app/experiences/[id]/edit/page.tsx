@@ -3,11 +3,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
+import ThemePicker from "@/components/ThemePicker";
 
 const FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
 
-const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
+const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type Experience = {
   id: number;
@@ -17,6 +18,7 @@ type Experience = {
   endDate: string;
   location?: string;
   roles: string[];
+  theme?: string;
 };
 
 export default function EditExperiencePage() {
@@ -30,6 +32,7 @@ export default function EditExperiencePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
+  const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(false);
   const [isAttending, setIsAttending] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +54,7 @@ export default function EditExperiencePage() {
       setStartDate(found.startDate);
       setEndDate(found.endDate);
       setLocation(found.location ?? "");
+      setTheme(found.theme ?? "editorial-classic");
       setIsHosting(found.roles.includes("hosted"));
       setIsAttending(found.roles.includes("attended"));
       // Only keep auto-syncing if the existing record is single-day;
@@ -89,6 +93,7 @@ export default function EditExperiencePage() {
       ...(isAttending ? ["attended"] : []),
     ];
 
+    console.log("[EditExperiencePage] saving experience.theme:", theme);
     updateExperience(Number(params.id), {
       name,
       coverImage,
@@ -96,6 +101,7 @@ export default function EditExperiencePage() {
       endDate,
       location,
       roles,
+      theme,
     });
 
     router.push(`/experiences/${params.id}`);
@@ -108,7 +114,7 @@ export default function EditExperiencePage() {
   if (experience === null) {
     return (
       <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           Experience not found
         </div>
       </main>
@@ -181,6 +187,11 @@ export default function EditExperiencePage() {
             className={FIELD_CLASSES}
           />
         </label>
+
+        <div className="flex flex-col gap-3">
+          <span className={LABEL_CLASSES}>Select your theme</span>
+          <ThemePicker value={theme} onChange={setTheme} />
+        </div>
 
         <div className="flex flex-col gap-3">
           <span className={LABEL_CLASSES}>Your Role</span>

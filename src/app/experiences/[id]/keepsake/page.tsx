@@ -22,6 +22,7 @@ type Experience = {
   startDate: string;
   endDate: string;
   location?: string;
+  theme?: string;
 };
 
 type ItineraryItem = {
@@ -139,7 +140,7 @@ export default function KeepsakePage() {
   if (experience === null) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           Experience not found
         </div>
       </main>
@@ -169,7 +170,7 @@ export default function KeepsakePage() {
     <main className="mx-auto w-full max-w-4xl px-4 py-16 sm:px-8 sm:py-24">
       <Link
         href={`/experiences/${params.id}`}
-        className="text-sm text-foreground/50 underline underline-offset-2 transition-colors hover:text-accent"
+        className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         Back to {experience.name}
       </Link>
@@ -187,10 +188,34 @@ export default function KeepsakePage() {
       ) : null}
 
       <div className="mt-12 text-center">
+        {experience.theme === "midnight-edition" ? (
+          // Midnight-Edition-only detail — a small invitation-card flourish
+          // Editorial Classic and Coastal Light don't have; see the
+          // .keepsake-eyebrow rule in globals.css.
+          <div className="mb-5 flex flex-col items-center gap-3">
+            <div className="h-px w-8 bg-foreground/25" />
+            <span className="keepsake-eyebrow text-sm text-muted">
+              A Keepsake
+            </span>
+          </div>
+        ) : null}
         <h1 className="font-serif text-4xl text-foreground sm:text-5xl">
-          {experience.name}
+          {experience.theme === "midnight-edition" ? (
+            // Optional per the original request: a noticeably larger first
+            // letter, reserved for this ceremonial page rather than every
+            // heading under this theme. Sized inline (not floated) so it
+            // stays compatible with this heading's centered alignment.
+            <>
+              <span className="text-[1.6em] leading-none">
+                {experience.name.charAt(0)}
+              </span>
+              {experience.name.slice(1)}
+            </>
+          ) : (
+            experience.name
+          )}
         </h1>
-        <p className="mt-4 text-foreground/60">
+        <p className="keepsake-meta mt-4 text-muted">
           {formatDateRange(experience.startDate, experience.endDate)}
           {experience.location ? ` · ${experience.location}` : ""}
         </p>
@@ -212,7 +237,7 @@ export default function KeepsakePage() {
                   {group.items.map((item) => (
                     <div key={item.id} className="relative">
                       <span className="absolute top-2 -left-[calc(2rem+3px)] h-1.5 w-1.5 rounded-full bg-accent" />
-                      <p className="text-sm text-foreground/50">
+                      <p className="text-sm text-muted">
                         {formatTimeRange(item)}
                       </p>
                       <p className="mt-1 font-serif text-lg text-foreground">
@@ -229,7 +254,7 @@ export default function KeepsakePage() {
                         </p>
                       ) : null}
                       {item.dressCode ? (
-                        <p className="mt-1 text-sm text-foreground/50 italic">
+                        <p className="mt-1 text-sm text-muted italic">
                           {item.dressCode}
                         </p>
                       ) : null}
@@ -339,7 +364,7 @@ export default function KeepsakePage() {
             {confirmedGuests.map((guest) => guest.name).join(" · ")}
           </p>
         ) : (
-          <p className="mt-6 text-center font-serif text-lg text-foreground/50 italic">
+          <p className="mt-6 text-center font-serif text-lg text-muted italic">
             No confirmed guests yet
           </p>
         )}

@@ -1,18 +1,181 @@
 @import "tailwindcss";
 @import "react-quill-new/dist/quill.snow.css";
 
-:root {
-  --background: #f6f3ec;
-  --foreground: #1b1a17;
-  --accent: #8a3b2b;
+/* Theme tokens. Everything a theme can change lives here, scoped under
+   [data-theme="<name>"] rather than hardcoded at :root — that's what makes
+   a look swappable per element (e.g. per-Experience) without touching the
+   pages that consume it. "editorial-classic" is the app's default look:
+   ivory/rust/Fraunces/Work Sans.
+   Each block also sets --background/--foreground/--accent — the names
+   Tailwind's utilities (bg-background, text-foreground, text-accent, etc.)
+   actually consume — directly, rather than only once at :root. A
+   :root-only mapping only computes from whatever [data-theme] is on
+   <html>; a NESTED [data-theme] element (e.g. the /experiences/[id]
+   layout's wrapper) would have no effect on those utility classes at all,
+   since a custom property set once at :root just inherits down unchanged.
+   Declaring the mapping inside every [data-theme] block means it
+   recomputes for whichever element (and subtree) the attribute is on.
+   --color-text-secondary is registered as the "muted" Tailwind color
+   (text-muted, placeholder:text-muted) below, used for the dominant
+   secondary-text convention across the app (labels, empty states,
+   captions, placeholders — what used to be text-foreground/50 and
+   placeholder:text-foreground/40). Other opacity levels on foreground
+   (/60, /70, /15, /10, /5 for borders and subtle fills) are left as-is —
+   they're already theme-correct (opacity of whatever --foreground
+   currently is), just not funneled through this one named token. */
+[data-theme="editorial-classic"] {
+  --color-bg: #f6f3ec;
+  --color-text: #1b1a17;
+  --color-text-secondary: rgba(27, 26, 23, 0.6);
+  --color-accent: #8a3b2b;
+  --font-heading: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-work-sans), ui-sans-serif, system-ui, sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Starter drop — three additional moods alongside the default, still
+   restrained and editorial rather than loud. Font names here name real
+   Google Fonts as the intent, with a generic fallback; none of these three
+   are loaded via next/font yet (only Fraunces/Work Sans are, for
+   editorial-classic), since there's no theme switcher to activate them
+   yet — that's a follow-up once one exists. */
+
+/* Midnight Press — an ink-and-brass late edition: near-black newsprint,
+   warm parchment text, a muted brass accent. */
+[data-theme="midnight-press"] {
+  --color-bg: #14161a;
+  --color-text: #ece7dd;
+  --color-text-secondary: rgba(236, 231, 221, 0.6);
+  --color-accent: #b08968;
+  --font-heading: "Newsreader", Georgia, serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Conservatory — a quiet botanical palette: soft sage-stone, deep forest
+   text, a muted moss accent. */
+[data-theme="conservatory"] {
+  --color-bg: #eef0e6;
+  --color-text: #232a21;
+  --color-text-secondary: rgba(35, 42, 33, 0.6);
+  --color-accent: #5c6b47;
+  --font-heading: "Cormorant Garamond", Georgia, serif;
+  --font-body: "Karla", ui-sans-serif, system-ui, sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Terra Rosa — sunlit warmth: sandy blush, deep umber text, an ochre-gold
+   accent (distinct from editorial-classic's rust, though both are in the
+   same warm-earth family). */
+[data-theme="terra-rosa"] {
+  --color-bg: #f6e9dd;
+  --color-text: #3a2418;
+  --color-text-secondary: rgba(58, 36, 24, 0.6);
+  --color-accent: #b3752e;
+  --font-heading: "Playfair Display", Georgia, serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Coastal Light and Midnight Edition, below, are loaded via next/font (see
+   layout.tsx) — real font files, not just names — since these two are
+   meant to be actually previewable now, ahead of the picker. */
+
+/* Coastal Light — a quiet seaside palette: pale sea-mist, deep slate text,
+   a muted teal accent. */
+[data-theme="coastal-light"] {
+  --color-bg: #f1f5f4;
+  --color-text: #1e2a2e;
+  --color-text-secondary: rgba(30, 42, 46, 0.6);
+  --color-accent: #3b6e71;
+  --font-heading: var(--font-cormorant-garamond), serif;
+  --font-body: var(--font-karla), sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Midnight Edition — a genuine dark theme, not a palette-swapped light one:
+   near-black bg, warm off-white text, a muted gold accent. Every subtle
+   fill/border/tint elsewhere in the app (bg-foreground/5, border-foreground/10,
+   bg-accent/5, etc.) is expressed as an opacity of the CURRENT theme's
+   foreground/accent rather than a fixed gray, so they already invert
+   direction correctly here (a faint light-on-dark wash, not a muddy
+   dark-on-dark one) without needing per-element overrides. The one value
+   tuned specifically for this theme is --color-text-secondary: light
+   themes here use 60% opacity of the text color, but 60% white-ish text on
+   a near-black background reads noticeably dimmer than 60% dark text on a
+   light background does, so this uses 70% to keep secondary text legible
+   against #1c1b1e specifically. */
+[data-theme="midnight-edition"] {
+  --color-bg: #1c1b1e;
+  --color-text: #f1ede4;
+  --color-text-secondary: rgba(241, 237, 228, 0.7);
+  --color-accent: #b08d57;
+  --font-heading: var(--font-bodoni-moda), serif;
+  --font-body: var(--font-jost), sans-serif;
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --accent: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+}
+
+/* Midnight Edition's own typography rules — pushed deliberately further
+   from Editorial Classic than a font swap alone gets you, so the two read
+   as distinct moods rather than "two serifs at different sizes". Scoped
+   under the theme selector rather than baked into Tailwind classes in the
+   pages, matching how every other per-theme difference here works.
+   font-weight: 300 at the theme root is intentional and cascades to
+   everything (labels, buttons, body copy) except h1, which is pinned
+   heavier below — the light/heavy contrast is the point (a high-fashion-
+   editorial convention), not an oversight. h1 bold is a deliberate,
+   theme-scoped exception to this app's normal "never use font-bold —
+   hierarchy comes from serif + size only" rule; it doesn't apply anywhere
+   else. */
+[data-theme="midnight-edition"] {
+  font-weight: 300;
+}
+
+[data-theme="midnight-edition"] h1 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 0.98;
+}
+
+/* Used by the Keepsake page's byline-style date/location line and its
+   small-caps eyebrow + rule — both Midnight-Edition-only details (see
+   keepsake/page.tsx), not applied under any other theme. */
+[data-theme="midnight-edition"] .keepsake-meta {
+  font-style: italic;
+}
+
+[data-theme="midnight-edition"] .keepsake-eyebrow {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-variant: small-caps;
+  letter-spacing: 0.22em;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
-  --font-sans: var(--font-work-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-fraunces), Georgia, serif;
+  --color-muted: var(--text-secondary);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-heading);
 }
 
 body {

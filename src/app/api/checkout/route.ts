@@ -9,6 +9,7 @@ type CheckoutRequestBody = {
   location?: string;
   roles?: string[];
   estimatedGuestCount?: number;
+  theme?: string;
 };
 
 export async function POST(request: Request) {
@@ -19,8 +20,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, coverImage, startDate, endDate, location, roles, estimatedGuestCount } =
-    body;
+  const {
+    name,
+    coverImage,
+    startDate,
+    endDate,
+    location,
+    roles,
+    estimatedGuestCount,
+    theme,
+  } = body;
 
   if (
     !name ||
@@ -69,6 +78,7 @@ export async function POST(request: Request) {
         location: location ?? "",
         roles: JSON.stringify(roles),
         estimatedGuestCount: String(estimatedGuestCount),
+        theme: theme ?? "editorial-classic",
       },
       success_url: `${appUrl}/experiences/new/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/experiences/new`,

@@ -6,9 +6,9 @@ import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems, updateItineraryItem } from "@/data/itineraryStore";
 
 const FIELD_CLASSES =
-  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-foreground/40 placeholder:italic focus:border-accent focus:outline-none";
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
 
-const LABEL_CLASSES = "text-sm tracking-wide text-foreground/50 uppercase";
+const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type Experience = {
   id: number;
@@ -109,7 +109,7 @@ export default function EditItineraryItemPage() {
   if (item === null) {
     return (
       <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
-        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-foreground/50 italic">
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           Itinerary item not found
         </div>
       </main>

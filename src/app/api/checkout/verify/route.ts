@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       location,
       roles,
       estimatedGuestCount,
+      theme,
     } = metadata;
 
     if (!experienceName || !startDate || !endDate || !roles || !estimatedGuestCount) {
@@ -59,6 +60,7 @@ export async function GET(request: Request) {
       location: location ?? "",
       roles: JSON.parse(roles) as string[],
       estimatedGuestCount: Number(estimatedGuestCount),
+      theme: theme ?? "editorial-classic",
     });
   } catch (error) {
     console.error("[api/checkout/verify] Failed to verify session:", error);
