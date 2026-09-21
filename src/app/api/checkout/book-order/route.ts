@@ -97,8 +97,15 @@ export async function POST(request: Request) {
       "[api/checkout/book-order] Failed to create checkout session:",
       error
     );
+    // TEMPORARY: `detail` exposes the raw error message in the response so
+    // it's visible directly in the browser's Network tab. Remove this field
+    // once the underlying issue is actually diagnosed and fixed — it isn't
+    // meant to ship long-term.
     return NextResponse.json(
-      { error: "Could not start checkout. Please try again." },
+      {
+        error: "Could not start checkout. Please try again.",
+        detail: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
