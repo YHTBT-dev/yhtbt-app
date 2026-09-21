@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addExperience } from "@/data/experiencesStore";
 import ThemePicker from "@/components/ThemePicker";
@@ -9,6 +9,13 @@ const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
 
 const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
+
+// PLACEHOLDER STORAGE: same approach (and same limit) as the Photos
+// feature's uploads (src/data/photosStore.js) — stored as a base64 data
+// URL directly on the experience record in localStorage. Not real photo
+// storage; once real cloud storage exists (e.g. Supabase Storage), this
+// should upload there instead and store a URL/reference.
+const MAX_COVER_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
 // Experiences at or under this estimated guest count are free — no
 // platform fee, no Stripe Checkout. Above it, the host pays the platform
@@ -26,6 +33,10 @@ export default function NewExperiencePage() {
   const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
+  const [coverImageInputMode, setCoverImageInputMode] = useState<
+    "url" | "upload"
+  >("upload");
+  const [coverImageError, setCoverImageError] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Tracks whether endDate should keep following startDate. Stays true
@@ -43,8 +54,34 @@ export default function NewExperiencePage() {
     if (value !== startDate) setIsEndDateAutoSynced(false);
   }
 
+  function handleCoverImageFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_COVER_IMAGE_SIZE_BYTES) {
+      setCoverImageError("Cover image must be 2MB or smaller.");
+      input.value = "";
+      return;
+    }
+
+    setCoverImageError("");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCoverImage(reader.result as string);
+      input.value = "";
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!coverImage) {
+      setError("Add a cover image.");
+      return;
+    }
 
     if (!isHosting && !isAttending) {
       setError("Select at least one: hosting or attending.");
@@ -101,7 +138,12 @@ export default function NewExperiencePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          coverImage,
+          // coverImage is deliberately NOT sent here — it's a base64 data
+          // URL (up to ~2MB), and Stripe Checkout Session metadata values
+          // are capped at 500 characters, so it can't round-trip through
+          // Stripe like the other fields. Stashed in sessionStorage below
+          // instead, keyed by the Checkout Session ID, and picked back up
+          // on the success page after payment.
           startDate,
           endDate,
           location,
@@ -113,11 +155,13 @@ export default function NewExperiencePage() {
 
       const data = await response.json();
 
-      if (!response.ok || !data.url) {
+      if (!response.ok || !data.url || !data.sessionId) {
         setError(data.error || "Could not start checkout. Please try again.");
         setIsSubmitting(false);
         return;
       }
+
+      sessionStorage.setItem(`coverImage:${data.sessionId}`, coverImage);
 
       // Full navigation to Stripe's hosted Checkout page, outside the app.
       window.location.href = data.url;
@@ -152,17 +196,78 @@ export default function NewExperiencePage() {
           />
         </label>
 
-        <label className="block">
-          <span className={LABEL_CLASSES}>Cover Image URL</span>
-          <input
-            type="url"
-            required
-            value={coverImage}
-            onChange={(event) => setCoverImage(event.target.value)}
-            placeholder="https://..."
-            className={FIELD_CLASSES}
-          />
-        </label>
+        <div className="flex flex-col gap-3">
+          <span className={LABEL_CLASSES}>Cover Image</span>
+
+          {coverImage ? (
+            <div className="flex items-center gap-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={coverImage}
+                alt=""
+                className="h-20 w-32 object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setCoverImage("")}
+                className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+              >
+                Remove Image
+              </button>
+            </div>
+          ) : null}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setCoverImageInputMode("url")}
+              className={`border-b-2 px-1 pb-1 text-sm tracking-wide uppercase transition-colors ${
+                coverImageInputMode === "url"
+                  ? "border-accent text-accent"
+                  : "border-transparent text-muted hover:text-accent"
+              }`}
+            >
+              Paste a URL
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoverImageInputMode("upload")}
+              className={`border-b-2 px-1 pb-1 text-sm tracking-wide uppercase transition-colors ${
+                coverImageInputMode === "upload"
+                  ? "border-accent text-accent"
+                  : "border-transparent text-muted hover:text-accent"
+              }`}
+            >
+              Upload a Photo
+            </button>
+          </div>
+
+          {coverImageInputMode === "url" ? (
+            <input
+              type="url"
+              value={coverImage.startsWith("data:") ? "" : coverImage}
+              onChange={(event) => setCoverImage(event.target.value)}
+              placeholder="https://..."
+              className={FIELD_CLASSES}
+            />
+          ) : (
+            <div>
+              <label className="inline-block cursor-pointer border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                {coverImage ? "Replace Image" : "Upload Image"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverImageFileChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          )}
+
+          {coverImageError ? (
+            <p className="text-sm text-red-600">{coverImageError}</p>
+          ) : null}
+        </div>
 
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
           <label className="block">

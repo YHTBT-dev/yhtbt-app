@@ -30,6 +30,13 @@ import {
   setPhotoItineraryItem,
   setPhotoTags,
 } from "@/data/photosStore";
+import {
+  addReflection,
+  getReflections,
+  hideReflection,
+  OPEN_ENDED_REFLECTION_PROMPT_ID,
+  REFLECTION_PROMPTS,
+} from "@/data/reflectionsStore";
 import Modal from "@/components/Modal";
 import {
   formatDateHeading,
@@ -154,6 +161,27 @@ type Photo = {
 };
 
 const MAX_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
+
+type Reflection = {
+  id: number;
+  experienceId: string;
+  promptId: number;
+  promptText: string;
+  responseText: string;
+  photo: string | null;
+  guestName: string;
+  taggedGuests: string[];
+  createdAt: string;
+  hidden: boolean;
+};
+
+// Tighter when a photo is attached, since the response then shares space
+// with the prompt (see the Reflections feed layout below).
+const REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO = 100;
+const REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO = 240;
+const REFLECTION_FIELD_CLASSES =
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+const REFLECTION_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type FlightDetail = {
   id: number;
@@ -386,7 +414,23 @@ export default function ExperienceDetailPage() {
   const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
   const [photoTagInputValue, setPhotoTagInputValue] = useState("");
   const [linkingPhotoId, setLinkingPhotoId] = useState<number | null>(null);
+  const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [reflectionPromptId, setReflectionPromptId] = useState(
+    REFLECTION_PROMPTS[0].id
+  );
+  const [reflectionCustomPromptText, setReflectionCustomPromptText] =
+    useState("");
+  const [reflectionResponseText, setReflectionResponseText] = useState("");
+  const [reflectionPhoto, setReflectionPhoto] = useState("");
+  const [reflectionPhotoError, setReflectionPhotoError] = useState("");
+  const [reflectionTagInput, setReflectionTagInput] = useState("");
+  const [reflectionTaggedGuests, setReflectionTaggedGuests] = useState<
+    string[]
+  >([]);
+  const [reflectionGuestName, setReflectionGuestName] = useState("");
+  const [reflectionError, setReflectionError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
     useState(false);
   const [collapsedSections, setCollapsedSections] = useState<
@@ -454,6 +498,7 @@ export default function ExperienceDetailPage() {
     setPolls(getPolls(params.id));
     setVotedPollIds(getVotedPollIds());
     setPhotos(getPhotos(params.id));
+    setReflections(getReflections(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -679,6 +724,121 @@ export default function ExperienceDetailPage() {
     reader.readAsDataURL(file);
   }
 
+  function handleReflectionPhotoFileChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_PHOTO_SIZE_BYTES) {
+      setReflectionPhotoError("Photo must be 2MB or smaller.");
+      input.value = "";
+      return;
+    }
+
+    setReflectionPhotoError("");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReflectionPhoto(reader.result as string);
+      input.value = "";
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleAddReflectionTag(rawName: string) {
+    const trimmed = rawName.trim();
+    if (!trimmed || reflectionTaggedGuests.includes(trimmed)) {
+      setReflectionTagInput("");
+      return;
+    }
+
+    setReflectionTaggedGuests((current) => [...current, trimmed]);
+    setReflectionTagInput("");
+  }
+
+  function handleRemoveReflectionTag(name: string) {
+    setReflectionTaggedGuests((current) =>
+      current.filter((tag) => tag !== name)
+    );
+  }
+
+  function handleSubmitReflection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!reflectionGuestName.trim()) {
+      setReflectionError("Enter your name.");
+      return;
+    }
+
+    const isOpenEnded = reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID;
+    const promptText = isOpenEnded
+      ? reflectionCustomPromptText.trim()
+      : (REFLECTION_PROMPTS.find((prompt) => prompt.id === reflectionPromptId)
+          ?.text ?? "");
+
+    if (isOpenEnded && !promptText) {
+      setReflectionError("Write your own prompt.");
+      return;
+    }
+
+    if (!reflectionResponseText.trim()) {
+      setReflectionError("Enter a response.");
+      return;
+    }
+
+    const maxResponseLength = reflectionPhoto
+      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO;
+    if (reflectionResponseText.length > maxResponseLength) {
+      setReflectionError(
+        `Response must be ${maxResponseLength} characters or fewer${
+          reflectionPhoto ? " when a photo is attached" : ""
+        }.`
+      );
+      return;
+    }
+
+    setReflectionError("");
+
+    const newReflection = addReflection({
+      experienceId: params.id,
+      promptId: reflectionPromptId,
+      promptText,
+      responseText: reflectionResponseText.trim(),
+      photo: reflectionPhoto || null,
+      guestName: reflectionGuestName.trim(),
+      taggedGuests: reflectionTaggedGuests,
+    });
+
+    setReflections((current) => [newReflection, ...current]);
+    setReflectionPromptId(REFLECTION_PROMPTS[0].id);
+    setReflectionCustomPromptText("");
+    setReflectionResponseText("");
+    setReflectionPhoto("");
+    setReflectionPhotoError("");
+    setReflectionTagInput("");
+    setReflectionTaggedGuests([]);
+    // Guest name is intentionally kept — the same person may answer
+    // several prompts in a row.
+  }
+
+  function handleHideReflection(id: number) {
+    if (
+      !window.confirm(
+        "Delete this reflection? It will no longer be visible to anyone."
+      )
+    ) {
+      return;
+    }
+
+    hideReflection(id);
+    setReflections((current) =>
+      current.filter((reflection) => reflection.id !== id)
+    );
+  }
+
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -699,6 +859,14 @@ export default function ExperienceDetailPage() {
     setIsGuestModalOpen(false);
     setGuestName("");
     setGuestEmail("");
+  }
+
+  function handleCopyInviteLink() {
+    const inviteLink = `${window.location.origin}/experiences/${params.id}/rsvp`;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setIsInviteLinkCopied(true);
+      setTimeout(() => setIsInviteLinkCopied(false), 2000);
+    });
   }
 
   function handleRsvpStatusChange(
@@ -1058,7 +1226,14 @@ export default function ExperienceDetailPage() {
             : "border-b border-transparent"
         }`}
       >
-        <div className="flex items-center gap-3">
+        <Link
+          href="/experiences"
+          className="inline-block font-serif text-sm tracking-[0.2em] text-foreground uppercase transition-colors hover:text-accent"
+        >
+          YHTBT
+        </Link>
+
+        <div className="mt-3 flex items-center gap-3">
           <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
             {isPreviewingAsGuest ? "Previewing as: Guest" : "Host View"}
           </span>
@@ -1533,7 +1708,14 @@ export default function ExperienceDetailPage() {
         {collapsedSections.guests ? null : (
         <>
         {isPreviewingAsGuest ? null : (
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-4">
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            {isInviteLinkCopied ? "Link Copied!" : "Copy Invite Link"}
+          </button>
           <button
             type="button"
             onClick={() => setIsGuestModalOpen(true)}
@@ -2722,6 +2904,256 @@ export default function ExperienceDetailPage() {
             )}
           </>
         )}
+
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("reflections")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.reflections} />
+            Reflections
+          </button>
+        </h2>
+
+        {collapsedSections.reflections ? null : (
+          <>
+            <form
+              onSubmit={handleSubmitReflection}
+              className="mt-6 flex flex-col gap-6"
+            >
+              <label className="block">
+                <span className={REFLECTION_LABEL_CLASSES}>Prompt</span>
+                <select
+                  value={reflectionPromptId}
+                  onChange={(event) =>
+                    setReflectionPromptId(Number(event.target.value))
+                  }
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                >
+                  {REFLECTION_PROMPTS.map((prompt) => (
+                    <option key={prompt.id} value={prompt.id}>
+                      {prompt.text ?? "Write your own..."}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID ? (
+                <label className="block">
+                  <span className={REFLECTION_LABEL_CLASSES}>Your Prompt</span>
+                  <input
+                    type="text"
+                    value={reflectionCustomPromptText}
+                    onChange={(event) =>
+                      setReflectionCustomPromptText(event.target.value)
+                    }
+                    placeholder="What do you want to reflect on?"
+                    className={REFLECTION_FIELD_CLASSES}
+                  />
+                </label>
+              ) : null}
+
+              <label className="block">
+                <span className={REFLECTION_LABEL_CLASSES}>
+                  Your Reflection ({reflectionResponseText.length}/
+                  {reflectionPhoto
+                    ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+                    : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO}
+                  )
+                </span>
+                <textarea
+                  value={reflectionResponseText}
+                  onChange={(event) =>
+                    setReflectionResponseText(event.target.value)
+                  }
+                  maxLength={
+                    reflectionPhoto
+                      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+                      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO
+                  }
+                  rows={3}
+                  placeholder="Share your reflection..."
+                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <div className="flex flex-col gap-3">
+                <span className={REFLECTION_LABEL_CLASSES}>Photo (Optional)</span>
+                <div className="flex items-center gap-4">
+                  {reflectionPhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={reflectionPhoto}
+                      alt=""
+                      className="h-20 w-32 object-cover"
+                    />
+                  ) : null}
+                  <label className="inline-block cursor-pointer border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                    {reflectionPhoto ? "Replace Photo" : "Add Photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReflectionPhotoFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {reflectionPhoto ? (
+                    <button
+                      type="button"
+                      onClick={() => setReflectionPhoto("")}
+                      className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {reflectionPhotoError ? (
+                  <p className="text-sm text-red-600">
+                    {reflectionPhotoError}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className={REFLECTION_LABEL_CLASSES}>Tag Someone (Optional)</span>
+                {reflectionTaggedGuests.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {reflectionTaggedGuests.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-wide text-accent uppercase"
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReflectionTag(name)}
+                          aria-label={`Remove ${name}`}
+                          className="text-accent/70 hover:text-accent"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <input
+                  type="text"
+                  list="reflection-tag-name-options"
+                  value={reflectionTagInput}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setReflectionTagInput(value);
+
+                    const isKnownGuest = guests.some(
+                      (guest) => guest.name === value
+                    );
+                    if (isKnownGuest) handleAddReflectionTag(value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddReflectionTag(reflectionTagInput);
+                    }
+                  }}
+                  placeholder="Name"
+                  className={REFLECTION_FIELD_CLASSES}
+                />
+                <datalist id="reflection-tag-name-options">
+                  {guests.map((guest) => (
+                    <option key={guest.id} value={guest.name} />
+                  ))}
+                </datalist>
+              </div>
+
+              <label className="block">
+                <span className={REFLECTION_LABEL_CLASSES}>Your Name</span>
+                <input
+                  type="text"
+                  value={reflectionGuestName}
+                  onChange={(event) =>
+                    setReflectionGuestName(event.target.value)
+                  }
+                  placeholder="Jamie Rivera"
+                  className={REFLECTION_FIELD_CLASSES}
+                />
+              </label>
+
+              {reflectionError ? (
+                <p className="text-sm text-red-600">{reflectionError}</p>
+              ) : null}
+
+              <button
+                type="submit"
+                className="self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Submit Reflection
+              </button>
+            </form>
+
+            {reflections.length === 0 ? (
+              <p className="mt-10 text-center font-serif text-lg text-muted italic">
+                No reflections yet
+              </p>
+            ) : (
+              <div className="mt-10 flex flex-col gap-10">
+                {reflections.map((reflection) => (
+                  <div
+                    key={reflection.id}
+                    className="border-b border-foreground/10 pb-8"
+                  >
+                    {reflection.photo ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={reflection.photo}
+                          alt=""
+                          className="w-full object-cover"
+                        />
+                        <p className="mt-3 text-sm text-muted italic">
+                          {reflection.promptText}
+                        </p>
+                        <p className="mt-1 text-foreground">
+                          {reflection.responseText}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-serif text-lg text-foreground">
+                          {reflection.responseText}
+                        </p>
+                        <p className="mt-2 text-sm text-muted italic">
+                          {reflection.promptText}
+                        </p>
+                      </>
+                    )}
+                    <div className="mt-3 flex items-center justify-between gap-4">
+                      <p className="text-xs text-muted">
+                        {reflection.guestName}
+                        {reflection.taggedGuests.length > 0
+                          ? ` · with ${reflection.taggedGuests.join(", ")}`
+                          : ""}
+                        {" · "}
+                        {formatRelativeTime(reflection.createdAt)}
+                      </p>
+                      {isPreviewingAsGuest ? null : (
+                        <button
+                          type="button"
+                          onClick={() => handleHideReflection(reflection.id)}
+                          className="shrink-0 text-xs text-foreground/30 underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {!isPreviewingAsGuest && (
       <>

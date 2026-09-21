@@ -3,7 +3,6 @@ import { getAppUrl, getPlatformFeePriceId, getStripeClient } from "@/lib/stripe"
 
 type CheckoutRequestBody = {
   name?: string;
-  coverImage?: string;
   startDate?: string;
   endDate?: string;
   location?: string;
@@ -20,16 +19,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const {
-    name,
-    coverImage,
-    startDate,
-    endDate,
-    location,
-    roles,
-    estimatedGuestCount,
-    theme,
-  } = body;
+  const { name, startDate, endDate, location, roles, estimatedGuestCount, theme } =
+    body;
 
   if (
     !name ||
@@ -72,7 +63,10 @@ export async function POST(request: Request) {
       // the experience on the success page once payment is confirmed.
       metadata: {
         experienceName: name,
-        coverImage: coverImage ?? "",
+        // coverImage isn't included here — it's a base64 data URL that can
+        // be far larger than Stripe's 500-character metadata value limit.
+        // The client stashes it in sessionStorage instead (see
+        // /experiences/new) and reattaches it after payment.
         startDate,
         endDate,
         location: location ?? "",

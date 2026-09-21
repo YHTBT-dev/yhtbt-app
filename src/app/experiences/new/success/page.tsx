@@ -49,11 +49,18 @@ function CheckoutSuccessContent() {
         // If a session already produced an experience, don't create
         // another one.
         const existing = getExperienceByCheckoutSessionId(sessionId!);
+        // coverImage never went through Stripe (see /api/checkout) — it
+        // was stashed in sessionStorage before the redirect and is picked
+        // back up here, once, at the moment the experience is actually
+        // created.
+        const storedCoverImage =
+          sessionStorage.getItem(`coverImage:${sessionId}`) ?? "";
+        sessionStorage.removeItem(`coverImage:${sessionId}`);
         const finalizedExperience =
           existing ??
           addExperience({
             name: data.name,
-            coverImage: data.coverImage,
+            coverImage: storedCoverImage,
             startDate: data.startDate,
             endDate: data.endDate,
             location: data.location,

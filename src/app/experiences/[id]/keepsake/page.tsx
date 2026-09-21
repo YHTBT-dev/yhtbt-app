@@ -169,8 +169,14 @@ export default function KeepsakePage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-16 sm:px-8 sm:py-24">
       <Link
+        href="/experiences"
+        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      >
+        &larr; Back to My Experiences
+      </Link>
+      <Link
         href={`/experiences/${params.id}`}
-        className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        className="mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         Back to {experience.name}
       </Link>

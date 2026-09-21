@@ -67,6 +67,34 @@ export function updateGuestStatus(id, rsvpStatus) {
   return updatedGuest;
 }
 
+// Used by the guest-facing RSVP page, which only has a typed name to go
+// on (not a guest id the way host actions do). Matches case-insensitively
+// and trims whitespace so "jamie rivera" and "Jamie Rivera " land on the
+// same guest; updates that guest's rsvpStatus if a match exists for this
+// experience, otherwise creates a new guest record with it.
+export function submitRsvp(experienceId, name, rsvpStatus) {
+  const trimmedName = name.trim();
+  const normalizedTarget = trimmedName.toLowerCase();
+  const guests = getAllGuests();
+
+  const existing = guests.find(
+    (guest) =>
+      guest.experienceId === experienceId &&
+      guest.name.trim().toLowerCase() === normalizedTarget
+  );
+
+  if (existing) {
+    return updateGuestStatus(existing.id, rsvpStatus);
+  }
+
+  return addGuest({
+    experienceId,
+    name: trimmedName,
+    email: "",
+    rsvpStatus,
+  });
+}
+
 // Removes every guest for an experience — used when the experience itself
 // is deleted, so nothing is left orphaned.
 export function deleteAllForExperience(experienceId) {

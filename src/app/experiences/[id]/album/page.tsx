@@ -79,8 +79,14 @@ export default function AlbumPage() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
       <Link
+        href="/experiences"
+        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      >
+        &larr; Back to My Experiences
+      </Link>
+      <Link
         href={`/experiences/${params.id}`}
-        className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        className="mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         Back to {experience.name}
       </Link>

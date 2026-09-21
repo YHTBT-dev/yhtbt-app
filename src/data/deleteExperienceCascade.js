@@ -7,11 +7,12 @@ import { deleteAllForExperience as deleteAllFaqs } from "@/data/faqsStore";
 import { deleteAllForExperience as deleteAllPolls } from "@/data/pollsStore";
 import { deleteAllForExperience as deleteAllUpdates } from "@/data/updatesStore";
 import { deleteAllForExperience as deleteNoteForExperience } from "@/data/notesStore";
+import { deleteAllForExperience as deleteAllReflections } from "@/data/reflectionsStore";
 
 // Single entry point for deleting an Experience: removes the experience
 // record itself plus everything keyed to it across every other store
 // (itinerary, guests, travel details, photos, FAQs, polls, updates,
-// notes), so nothing orphaned is left behind. Irreversible.
+// notes, reflections), so nothing orphaned is left behind. Irreversible.
 //
 // experienceId should be the string form (as used everywhere else, e.g.
 // route params) — it's converted to a number only for the experiencesStore
@@ -25,5 +26,6 @@ export function deleteExperienceCompletely(experienceId) {
   deleteAllPolls(experienceId);
   deleteAllUpdates(experienceId);
   deleteNoteForExperience(experienceId);
+  deleteAllReflections(experienceId);
   deleteExperience(Number(experienceId));
 }

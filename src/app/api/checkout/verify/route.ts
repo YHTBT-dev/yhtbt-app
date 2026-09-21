@@ -36,7 +36,6 @@ export async function GET(request: Request) {
     const metadata = session.metadata ?? {};
     const {
       experienceName,
-      coverImage,
       startDate,
       endDate,
       location,
@@ -54,7 +53,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       name: experienceName,
-      coverImage: coverImage ?? "",
+      // coverImage isn't part of Checkout Session metadata (see
+      // /api/checkout) — the success page reattaches it from
+      // sessionStorage instead.
       startDate,
       endDate,
       location: location ?? "",

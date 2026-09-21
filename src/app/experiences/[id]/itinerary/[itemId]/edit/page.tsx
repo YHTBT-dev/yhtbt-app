@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems, updateItineraryItem } from "@/data/itineraryStore";
 
@@ -118,7 +119,14 @@ export default function EditItineraryItemPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
-      <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+      <Link
+        href="/experiences"
+        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      >
+        &larr; Back to My Experiences
+      </Link>
+
+      <h1 className="mt-3 font-serif text-3xl text-foreground sm:text-4xl">
         Edit Itinerary Item
       </h1>
 
