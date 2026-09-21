@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
+import { compressImageFile } from "@/lib/compressImage";
 import ThemePicker from "@/components/ThemePicker";
 
 const FIELD_CLASSES =
@@ -93,25 +94,33 @@ export default function EditExperiencePage() {
     if (value !== startDate) setIsEndDateAutoSynced(false);
   }
 
-  function handleCoverImageFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleCoverImageFileChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
     const input = event.target;
     const file = input.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_COVER_IMAGE_SIZE_BYTES) {
-      setCoverImageError("Cover image must be 2MB or smaller.");
-      input.value = "";
-      return;
-    }
-
     setCoverImageError("");
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCoverImage(reader.result as string);
+    try {
+      // Compressed first (resized + re-encoded as JPEG) so the size limit
+      // below is checked against what actually gets stored, not the
+      // original file.
+      const dataUrl = await compressImageFile(file);
+
+      if (dataUrl.length > MAX_COVER_IMAGE_SIZE_BYTES) {
+        setCoverImageError("Cover image is too large even after compression.");
+        input.value = "";
+        return;
+      }
+
+      setCoverImage(dataUrl);
       input.value = "";
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setCoverImageError("Could not process that image. Try a different file.");
+      input.value = "";
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

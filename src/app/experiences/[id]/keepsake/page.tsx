@@ -7,7 +7,9 @@ import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems } from "@/data/itineraryStore";
 import { getGuests } from "@/data/guestsStore";
 import { getPhotos } from "@/data/photosStore";
+import { getReflections } from "@/data/reflectionsStore";
 import Modal from "@/components/Modal";
+import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
   formatDateHeading,
   formatDateRange,
@@ -52,6 +54,16 @@ type Photo = {
   id: number;
   dataUrl: string;
   itineraryItemId: number | null;
+};
+
+type Reflection = {
+  id: number;
+  promptText: string;
+  responseText: string;
+  photo: string | null;
+  guestName: string;
+  taggedGuests: string[];
+  createdAt: string;
 };
 
 // Gives the photo spread a bit of editorial rhythm instead of a uniform
@@ -124,6 +136,9 @@ export default function KeepsakePage() {
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [expandedReflection, setExpandedReflection] =
+    useState<Reflection | null>(null);
   const [coverImageError, setCoverImageError] = useState(false);
   const [isBookOrderModalOpen, setIsBookOrderModalOpen] = useState(false);
   const [recipientName, setRecipientName] = useState("");
@@ -145,6 +160,7 @@ export default function KeepsakePage() {
     setItineraryItems(getItineraryItems(params.id));
     setGuests(getGuests(params.id));
     setPhotos(getPhotos(params.id));
+    setReflections(getReflections(params.id));
     setCoverImageError(false);
   }, [params.id]);
 
@@ -433,6 +449,34 @@ export default function KeepsakePage() {
           </div>
         </section>
       ) : null}
+
+      {reflections.length > 0 ? (
+        <section className="mt-24">
+          <h2 className="text-center font-serif text-2xl text-foreground">
+            Reflections
+          </h2>
+
+          {/* A clean, aligned grid rather than the live feed's masonry —
+              a keepsake should read as composed and orderly, not casual,
+              so PolaroidCard is rendered here with rotate={false} and no
+              onDelete (this is a read-only compiled view). */}
+          <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3">
+            {reflections.map((reflection) => (
+              <PolaroidCard
+                key={reflection.id}
+                reflection={reflection}
+                rotate={false}
+                onExpand={setExpandedReflection}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <PolaroidExpandModal
+        reflection={expandedReflection}
+        onClose={() => setExpandedReflection(null)}
+      />
 
       <section className="mt-24">
         <h2 className="text-center font-serif text-2xl text-foreground">
