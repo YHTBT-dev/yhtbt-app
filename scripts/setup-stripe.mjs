@@ -1,7 +1,7 @@
-// One-time (idempotent) setup script: creates the "YHTBT Platform Fee"
-// Product and a one-time $50 test Price in Stripe, if they don't already
-// exist. Re-running it is safe — it reuses what's already there instead
-// of creating duplicates.
+// One-time (idempotent) setup script: creates each YHTBT test Product and
+// its one-time test Price in Stripe, if they don't already exist.
+// Re-running it is safe — it reuses what's already there instead of
+// creating duplicates.
 //
 // Usage: node --env-file=.env.local scripts/setup-stripe.mjs
 
@@ -17,24 +17,37 @@ if (!secretKey) {
 
 const stripe = new Stripe(secretKey);
 
-const PRODUCT_NAME = "YHTBT Platform Fee";
-const PRICE_AMOUNT_CENTS = 5000; // $50.00 placeholder — real pricing not finalized
+const PRODUCTS = [
+  {
+    productName: "YHTBT Platform Fee",
+    description:
+      "One-time platform fee for hosting an Experience on YHTBT (placeholder pricing, not finalized).",
+    priceAmountCents: 5000, // $50.00 placeholder — real pricing not finalized
+    envVarName: "STRIPE_PLATFORM_FEE_PRICE_ID",
+  },
+  {
+    productName: "YHTBT Keepsake Book",
+    description:
+      "One-time order of a printed, human-curated Experience keepsake book (placeholder pricing, not finalized).",
+    priceAmountCents: 7500, // $75.00 placeholder — real pricing not finalized
+    envVarName: "STRIPE_KEEPSAKE_BOOK_PRICE_ID",
+  },
+];
 
-async function main() {
+async function setUpProduct({ productName, description, priceAmountCents, envVarName }) {
   const existingProducts = await stripe.products.list({ limit: 100 });
   let product = existingProducts.data.find(
-    (item) => item.name === PRODUCT_NAME && item.active
+    (item) => item.name === productName && item.active
   );
 
   if (!product) {
     product = await stripe.products.create({
-      name: PRODUCT_NAME,
-      description:
-        "One-time platform fee for hosting an Experience on YHTBT (placeholder pricing, not finalized).",
+      name: productName,
+      description,
     });
-    console.log(`Created product: ${product.id}`);
+    console.log(`Created product: ${product.id} (${productName})`);
   } else {
-    console.log(`Reusing existing product: ${product.id}`);
+    console.log(`Reusing existing product: ${product.id} (${productName})`);
   }
 
   const existingPrices = await stripe.prices.list({
@@ -44,7 +57,7 @@ async function main() {
   });
   let price = existingPrices.data.find(
     (item) =>
-      item.unit_amount === PRICE_AMOUNT_CENTS &&
+      item.unit_amount === priceAmountCents &&
       item.currency === "usd" &&
       item.type === "one_time"
   );
@@ -52,7 +65,7 @@ async function main() {
   if (!price) {
     price = await stripe.prices.create({
       product: product.id,
-      unit_amount: PRICE_AMOUNT_CENTS,
+      unit_amount: priceAmountCents,
       currency: "usd",
       // No `recurring` field — this makes it a one-time price.
     });
@@ -61,11 +74,22 @@ async function main() {
     console.log(`Reusing existing price: ${price.id}`);
   }
 
-  console.log("\nAdd this to .env.local:");
-  console.log(`STRIPE_PLATFORM_FEE_PRICE_ID=${price.id}`);
+  return { envVarName, priceId: price.id };
+}
+
+async function main() {
+  const results = [];
+  for (const product of PRODUCTS) {
+    results.push(await setUpProduct(product));
+  }
+
+  console.log("\nAdd these to .env.local:");
+  for (const { envVarName, priceId } of results) {
+    console.log(`${envVarName}=${priceId}`);
+  }
 }
 
 main().catch((error) => {
-  console.error("Failed to set up Stripe product/price:", error);
+  console.error("Failed to set up Stripe products/prices:", error);
   process.exit(1);
 });

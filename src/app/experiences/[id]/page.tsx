@@ -37,6 +37,11 @@ import {
   OPEN_ENDED_REFLECTION_PROMPT_ID,
   REFLECTION_PROMPTS,
 } from "@/data/reflectionsStore";
+import {
+  BOOK_ORDER_STATUSES,
+  getBookOrders,
+  updateBookOrderStatus,
+} from "@/data/bookOrdersStore";
 import Modal from "@/components/Modal";
 import {
   formatDateHeading,
@@ -174,6 +179,23 @@ type Reflection = {
   taggedGuests: string[];
   createdAt: string;
   hidden: boolean;
+};
+
+type BookOrder = {
+  id: number;
+  experienceId: string;
+  recipientName: string;
+  shippingAddress: {
+    line1: string;
+    line2: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+  };
+  status: string;
+  stripeSessionId: string;
+  createdAt: string;
 };
 
 // Tighter when a photo is attached, since the response then shares space
@@ -506,6 +528,7 @@ export default function ExperienceDetailPage() {
   const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
   const [expandedReflection, setExpandedReflection] =
     useState<Reflection | null>(null);
+  const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
@@ -576,6 +599,7 @@ export default function ExperienceDetailPage() {
     setVotedPollIds(getVotedPollIds());
     setPhotos(getPhotos(params.id));
     setReflections(getReflections(params.id));
+    setBookOrders(getBookOrders(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -919,6 +943,14 @@ export default function ExperienceDetailPage() {
     });
     setExperience((current) =>
       current ? { ...current, reflectionsEnabled: nextReflectionsEnabled } : current
+    );
+  }
+
+  function handleBookOrderStatusChange(id: number, status: string) {
+    const updated = updateBookOrderStatus(id, status);
+    if (!updated) return;
+    setBookOrders((current) =>
+      current.map((order) => (order.id === id ? updated : order))
     );
   }
 
@@ -2781,6 +2813,65 @@ export default function ExperienceDetailPage() {
           </div>
         )}
         </>
+        )}
+      </div>
+      ) : null}
+
+      {!isPreviewingAsGuest && bookOrders.length > 0 ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("bookOrders")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.bookOrders} />
+            Book Orders
+          </button>
+        </h2>
+
+        {collapsedSections.bookOrders ? null : (
+          <div className="mt-6 flex flex-col gap-8">
+            {bookOrders.map((order) => (
+              <div
+                key={order.id}
+                className="border-b border-foreground/10 pb-8 last:border-b-0"
+              >
+                <p className="font-serif text-lg text-foreground">
+                  {order.recipientName}
+                </p>
+                <p className="mt-1 text-sm text-foreground/60">
+                  {order.shippingAddress.line1}
+                  {order.shippingAddress.line2
+                    ? `, ${order.shippingAddress.line2}`
+                    : ""}
+                  <br />
+                  {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
+                  {order.shippingAddress.zip}
+                  <br />
+                  {order.shippingAddress.country}
+                </p>
+                <label className="mt-4 block max-w-xs">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Status
+                  </span>
+                  <select
+                    value={order.status}
+                    onChange={(event) =>
+                      handleBookOrderStatusChange(order.id, event.target.value)
+                    }
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                  >
+                    {BOOK_ORDER_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ))}
+          </div>
         )}
       </div>
       ) : null}

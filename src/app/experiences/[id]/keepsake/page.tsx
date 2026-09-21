@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
 import { getItineraryItems } from "@/data/itineraryStore";
 import { getGuests } from "@/data/guestsStore";
 import { getPhotos } from "@/data/photosStore";
+import Modal from "@/components/Modal";
 import {
   formatDateHeading,
   formatDateRange,
@@ -14,6 +15,10 @@ import {
   getPhotoDownloadFilename,
   groupByDate,
 } from "@/lib/format";
+
+const BOOK_ORDER_FIELD_CLASSES =
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-muted placeholder:italic focus:border-accent focus:outline-none";
+const BOOK_ORDER_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
 type Experience = {
   id: number;
@@ -120,6 +125,16 @@ export default function KeepsakePage() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [coverImageError, setCoverImageError] = useState(false);
+  const [isBookOrderModalOpen, setIsBookOrderModalOpen] = useState(false);
+  const [recipientName, setRecipientName] = useState("");
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
+  const [city, setCity] = useState("");
+  const [addressState, setAddressState] = useState("");
+  const [zip, setZip] = useState("");
+  const [country, setCountry] = useState("");
+  const [bookOrderError, setBookOrderError] = useState("");
+  const [isSubmittingBookOrder, setIsSubmittingBookOrder] = useState(false);
 
   useEffect(() => {
     const experiences = getExperiences();
@@ -132,6 +147,64 @@ export default function KeepsakePage() {
     setPhotos(getPhotos(params.id));
     setCoverImageError(false);
   }, [params.id]);
+
+  function handleOpenBookOrderModal() {
+    setBookOrderError("");
+    setIsBookOrderModalOpen(true);
+  }
+
+  function handleCloseBookOrderModal() {
+    setIsBookOrderModalOpen(false);
+    setRecipientName("");
+    setAddressLine1("");
+    setAddressLine2("");
+    setCity("");
+    setAddressState("");
+    setZip("");
+    setCountry("");
+    setBookOrderError("");
+  }
+
+  async function handleSubmitBookOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBookOrderError("");
+    setIsSubmittingBookOrder(true);
+
+    try {
+      const response = await fetch("/api/checkout/book-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experienceId: params.id,
+          recipientName,
+          shippingAddress: {
+            line1: addressLine1,
+            line2: addressLine2,
+            city,
+            state: addressState,
+            zip,
+            country,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        setBookOrderError(
+          data.error || "Could not start checkout. Please try again."
+        );
+        setIsSubmittingBookOrder(false);
+        return;
+      }
+
+      // Full navigation to Stripe's hosted Checkout page, outside the app.
+      window.location.href = data.url;
+    } catch {
+      setBookOrderError("Could not start checkout. Please try again.");
+      setIsSubmittingBookOrder(false);
+    }
+  }
 
   if (experience === undefined) {
     return null;
@@ -375,6 +448,136 @@ export default function KeepsakePage() {
           </p>
         )}
       </section>
+
+      <div className="mt-24 flex flex-col items-center gap-3 text-center">
+        <p className="font-serif text-lg text-foreground/70 italic">
+          Want to hold onto this one?
+        </p>
+        <button
+          type="button"
+          onClick={handleOpenBookOrderModal}
+          className="border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+        >
+          Order the Printed Keepsake Book
+        </button>
+      </div>
+
+      <Modal
+        isOpen={isBookOrderModalOpen}
+        onClose={handleCloseBookOrderModal}
+        title="Order the Printed Keepsake Book"
+      >
+        <form onSubmit={handleSubmitBookOrder} className="flex flex-col gap-6">
+          <p className="text-sm text-muted">
+            A human-curated, printed version of this keepsake, mailed to
+            whoever you choose. $75 (test mode) — you&apos;ll be taken to a
+            secure Stripe checkout page next.
+          </p>
+
+          <label className="block">
+            <span className={BOOK_ORDER_LABEL_CLASSES}>Recipient Name</span>
+            <input
+              type="text"
+              required
+              value={recipientName}
+              onChange={(event) => setRecipientName(event.target.value)}
+              placeholder="Jamie Rivera"
+              className={BOOK_ORDER_FIELD_CLASSES}
+            />
+          </label>
+
+          <label className="block">
+            <span className={BOOK_ORDER_LABEL_CLASSES}>Address Line 1</span>
+            <input
+              type="text"
+              required
+              value={addressLine1}
+              onChange={(event) => setAddressLine1(event.target.value)}
+              placeholder="123 Main St"
+              className={BOOK_ORDER_FIELD_CLASSES}
+            />
+          </label>
+
+          <label className="block">
+            <span className={BOOK_ORDER_LABEL_CLASSES}>
+              Address Line 2 (Optional)
+            </span>
+            <input
+              type="text"
+              value={addressLine2}
+              onChange={(event) => setAddressLine2(event.target.value)}
+              placeholder="Apt, suite, etc."
+              className={BOOK_ORDER_FIELD_CLASSES}
+            />
+          </label>
+
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+            <label className="block">
+              <span className={BOOK_ORDER_LABEL_CLASSES}>City</span>
+              <input
+                type="text"
+                required
+                value={city}
+                onChange={(event) => setCity(event.target.value)}
+                placeholder="Los Angeles"
+                className={BOOK_ORDER_FIELD_CLASSES}
+              />
+            </label>
+
+            <label className="block">
+              <span className={BOOK_ORDER_LABEL_CLASSES}>State</span>
+              <input
+                type="text"
+                required
+                value={addressState}
+                onChange={(event) => setAddressState(event.target.value)}
+                placeholder="CA"
+                className={BOOK_ORDER_FIELD_CLASSES}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+            <label className="block">
+              <span className={BOOK_ORDER_LABEL_CLASSES}>ZIP</span>
+              <input
+                type="text"
+                required
+                value={zip}
+                onChange={(event) => setZip(event.target.value)}
+                placeholder="90001"
+                className={BOOK_ORDER_FIELD_CLASSES}
+              />
+            </label>
+
+            <label className="block">
+              <span className={BOOK_ORDER_LABEL_CLASSES}>Country</span>
+              <input
+                type="text"
+                required
+                value={country}
+                onChange={(event) => setCountry(event.target.value)}
+                placeholder="United States"
+                className={BOOK_ORDER_FIELD_CLASSES}
+              />
+            </label>
+          </div>
+
+          {bookOrderError ? (
+            <p className="text-sm text-red-600">{bookOrderError}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={isSubmittingBookOrder}
+            className="self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmittingBookOrder
+              ? "Redirecting to Checkout…"
+              : "Continue to Payment"}
+          </button>
+        </form>
+      </Modal>
 
       <span
         aria-hidden="true"

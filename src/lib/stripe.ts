@@ -30,6 +30,18 @@ export function getPlatformFeePriceId() {
   return priceId;
 }
 
+// The "YHTBT Keepsake Book" one-time test Price, created by the same
+// scripts/setup-stripe.mjs. Pricing is a $75 placeholder — not finalized.
+export function getKeepsakeBookPriceId() {
+  const priceId = process.env.STRIPE_KEEPSAKE_BOOK_PRICE_ID;
+  if (!priceId) {
+    throw new Error(
+      "STRIPE_KEEPSAKE_BOOK_PRICE_ID is not set. Run `node --env-file=.env.local scripts/setup-stripe.mjs` and add the printed price ID to .env.local."
+    );
+  }
+  return priceId;
+}
+
 export function getAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
