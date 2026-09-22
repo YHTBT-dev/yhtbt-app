@@ -1970,7 +1970,7 @@ export default function ExperienceDetailPage() {
         </Modal>
 
         {isPreviewingAsGuest ? null : (
-        <div className="mt-8 flex gap-8 border-b border-foreground/10">
+        <div className="mt-8 flex gap-8 overflow-x-auto border-b border-foreground/10">
           {GUEST_TABS.map((tab) => {
             const isActive = tab.status === guestTab;
             const count =
@@ -1985,7 +1985,7 @@ export default function ExperienceDetailPage() {
                 key={tab.status}
                 type="button"
                 onClick={() => setGuestTab(tab.status)}
-                className={`-mb-px border-b-2 px-3 pb-3 text-sm tracking-wide uppercase transition-colors ${
+                className={`-mb-px shrink-0 border-b-2 px-3 pb-3 text-sm tracking-wide whitespace-nowrap uppercase transition-colors ${
                   isActive
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-transparent text-muted hover:text-accent"
