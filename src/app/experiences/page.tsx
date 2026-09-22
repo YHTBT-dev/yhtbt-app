@@ -23,6 +23,19 @@ function parseLocalDate(dateString: string) {
   return new Date(year, month - 1, day);
 }
 
+// Today as a local "YYYY-MM-DD" string (not toISOString(), which is UTC
+// and can land on the wrong day depending on the viewer's timezone offset
+// — the same class of bug parseLocalDate above exists to avoid). Since
+// startDate is stored in the same YYYY-MM-DD shape, plain string
+// comparison against this is chronologically correct without re-parsing
+// either side into a Date.
+function getTodayLocalDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 function formatDateRange(startDate: string, endDate: string) {
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
@@ -102,6 +115,23 @@ export default function ExperiencesPage() {
     [experiences, activeTab]
   );
 
+  // Whichever Experience on the CURRENT tab has the nearest startDate
+  // that's today or later — recomputed per tab (via filteredExperiences)
+  // so Hosted and Attended each get their own independent "Up Next" pick,
+  // and null (no badge shown anywhere) when nothing on this tab is
+  // upcoming.
+  const upNextExperienceId = useMemo(() => {
+    const today = getTodayLocalDateString();
+    const upcoming = filteredExperiences.filter(
+      (experience) => experience.startDate >= today
+    );
+    if (upcoming.length === 0) return null;
+
+    return upcoming.reduce((nearest, experience) =>
+      experience.startDate < nearest.startDate ? experience : nearest
+    ).id;
+  }, [filteredExperiences]);
+
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
       {isDeletedToastMounted ? (
@@ -175,7 +205,12 @@ export default function ExperiencesPage() {
               href={`/experiences/${experience.id}`}
               className="group block"
             >
-              <div className="aspect-video w-full overflow-hidden bg-foreground/5">
+              <div className="relative aspect-video w-full overflow-hidden bg-foreground/5">
+                {experience.id === upNextExperienceId ? (
+                  <span className="absolute top-2 left-2 z-10 border border-accent/30 bg-background/90 px-2 py-0.5 text-xs tracking-widest text-accent uppercase">
+                    Up Next
+                  </span>
+                ) : null}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={experience.coverImage}
