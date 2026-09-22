@@ -2463,18 +2463,20 @@ export default function ExperienceDetailPage() {
           const effectiveGuestTab = isPreviewingAsGuest
             ? "directory"
             : guestTab;
-          const activeTab = GUEST_TABS.find(
-            (tab) => tab.status === effectiveGuestTab
-          )!;
 
           if (effectiveGuestTab === "directory") {
+            // "directory" isn't a selectable tab anymore (Attendee
+            // Directory was removed from GUEST_TABS) — it's only reached
+            // via isPreviewingAsGuest above, so it needs its own message
+            // rather than looking one up in GUEST_TABS, where it will
+            // never find a match.
             const confirmedGuests = guests.filter(
               (guest) => guest.everConfirmed
             );
 
             return confirmedGuests.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
-                {activeTab.emptyMessage}
+                No confirmed attendees yet
               </div>
             ) : (
               <div className="mt-8 divide-y divide-foreground/10 border-t border-foreground/10">
@@ -2489,6 +2491,16 @@ export default function ExperienceDetailPage() {
               </div>
             );
           }
+
+          // Falls back to the first tab rather than crashing if guestTab
+          // ever holds a value that doesn't match any current entry in
+          // GUEST_TABS (e.g. a stale reference to a tab that's since been
+          // removed or renamed) — this class of bug has come up before,
+          // so the lookup stays defensive here rather than assuming a
+          // match will always exist.
+          const activeTab =
+            GUEST_TABS.find((tab) => tab.status === guestTab) ??
+            GUEST_TABS[0];
 
           const tabGuests =
             guestTab === "all"
