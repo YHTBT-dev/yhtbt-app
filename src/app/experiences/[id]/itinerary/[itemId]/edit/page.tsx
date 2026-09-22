@@ -62,11 +62,15 @@ export default function EditItineraryItemPage() {
     dressCodeOption === DRESS_CODE_OTHER ? dressCodeOther : dressCodeOption;
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const foundExperience = experiences.find(
-      (experienceItem: Experience) => String(experienceItem.id) === params.id
-    );
-    if (foundExperience) setExperience(foundExperience);
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const foundExperience = experiences.find(
+        (experienceItem: Experience) => String(experienceItem.id) === params.id
+      );
+      if (foundExperience) setExperience(foundExperience);
+    });
 
     const items = getItineraryItems(params.id);
     const foundItem = items.find(
@@ -93,6 +97,10 @@ export default function EditItineraryItemPage() {
         setDressCodeOther(existingDressCode);
       }
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id, params.itemId]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

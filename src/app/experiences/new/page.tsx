@@ -119,23 +119,30 @@ export default function NewExperiencePage() {
     // guest list built later in the Guests section is separate from this
     // upfront estimate.
     if (guestCount <= GUEST_COUNT_FREE_TIER_THRESHOLD) {
-      const newExperience = addExperience({
-        name,
-        coverImage,
-        startDate,
-        endDate,
-        location,
-        roles,
-        estimatedGuestCount: guestCount,
-        theme,
-        paid: false,
-      });
-      console.log(
-        "[NewExperiencePage] saved experience.theme:",
-        newExperience.theme
-      );
-      sessionStorage.setItem("justCreated", String(newExperience.id));
-      router.push(`/experiences/${newExperience.id}`);
+      setIsSubmitting(true);
+
+      try {
+        const newExperience = await addExperience({
+          name,
+          coverImage,
+          startDate,
+          endDate,
+          location,
+          roles,
+          estimatedGuestCount: guestCount,
+          theme,
+          paid: false,
+        });
+        console.log(
+          "[NewExperiencePage] saved experience.theme:",
+          newExperience.theme
+        );
+        sessionStorage.setItem("justCreated", String(newExperience.id));
+        router.push(`/experiences/${newExperience.id}`);
+      } catch {
+        setError("Could not save this Experience. Please try again.");
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -375,7 +382,9 @@ export default function NewExperiencePage() {
           className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting
-            ? "Redirecting to Checkout…"
+            ? requiresPayment
+              ? "Redirecting to Checkout…"
+              : "Saving…"
             : requiresPayment
               ? "Continue to Payment"
               : "Create Experience"}

@@ -1,112 +1,146 @@
-import mockExperiences from "@/data/mockExperiences";
+import { getSupabaseClient } from "@/lib/supabase";
+import { getOrPromptCreatorName } from "@/lib/creatorName";
 
-const STORAGE_KEY = "yhtbt:experiences";
+const TABLE_NAME = "experiences";
 
-function readFromStorage() {
-  if (typeof window === "undefined") return null;
+// The first store migrated off localStorage onto Supabase (see the
+// "experiences" table + RLS policies set up alongside this change) —
+// every function here is now async, since a real network request replaces
+// what used to be a synchronous localStorage read/write. Every other
+// store (guests, itinerary, photos, etc.) still lives in localStorage and
+// references an Experience purely by its id as a string (e.g. via route
+// params) — Supabase's own auto-generated bigint id is used as the
+// primary key here specifically so that convention (String(id) ===
+// experienceId, Number(experienceId) when writing) keeps working
+// unchanged everywhere else, without needing to touch any other store.
+//
+// Table columns are snake_case (Postgres convention — unquoted mixed-case
+// identifiers get silently lowercased, a real footgun otherwise); rowTo/
+// ExperienceToRow below translate to/from this app's usual camelCase
+// shape so nothing else in the app needs to know the difference.
+//
+// RLS on this table is wide open to the anon role (select/insert/update/
+// delete) — there's no real per-user auth yet, same tradeoff already made
+// for the Storage bucket. Not real security on its own; see proxy.ts.
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function writeToStorage(experiences) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(experiences));
-}
-
-// Older records may still have a single "role" string instead of a
-// "roles" array; treat those as roles: [role] instead of crashing.
-// Records from before the platform tier fee existed have no "paid" field —
-// default to false rather than treating them as having paid. Records from
-// before guest-count tiering existed have no "estimatedGuestCount" —
-// default to null (unknown), distinct from the real guest list built
-// later in the Guests section. Records from before theming existed have no
-// "theme" — default to the app's original look, "editorial-classic". Records
-// from before Reflections existed have no "reflectionsEnabled" — default to
-// false, since it's a host opt-in, not on by default.
-export function normalizeExperience(experience) {
-  const withRoles = Array.isArray(experience.roles)
-    ? experience
-    : (() => {
-        const { role, ...rest } = experience;
-        return { ...rest, roles: role ? [role] : [] };
-      })();
-
+function rowToExperience(row) {
   return {
-    ...withRoles,
-    paid: withRoles.paid ?? false,
-    estimatedGuestCount: withRoles.estimatedGuestCount ?? null,
-    checkoutSessionId: withRoles.checkoutSessionId ?? null,
-    theme: withRoles.theme ?? "editorial-classic",
-    reflectionsEnabled: withRoles.reflectionsEnabled ?? false,
+    id: row.id,
+    name: row.name,
+    coverImage: row.cover_image ?? "",
+    startDate: row.start_date,
+    endDate: row.end_date,
+    location: row.location ?? "",
+    theme: row.theme ?? "editorial-classic",
+    reflectionsEnabled: row.reflections_enabled ?? false,
+    roles: row.roles ?? [],
+    paid: row.paid ?? false,
+    estimatedGuestCount: row.estimated_guest_count ?? null,
+    checkoutSessionId: row.checkout_session_id ?? null,
+    createdBy: row.created_by ?? "",
   };
 }
 
-export function getExperiences() {
-  if (typeof window === "undefined") {
-    return mockExperiences.map(normalizeExperience);
+// Only maps fields that are actually present on the input, so a partial
+// update() call doesn't accidentally overwrite unrelated columns with
+// undefined/null.
+function experienceToRow(experience) {
+  const row = {};
+  if (experience.name !== undefined) row.name = experience.name;
+  if (experience.coverImage !== undefined) row.cover_image = experience.coverImage;
+  if (experience.startDate !== undefined) row.start_date = experience.startDate;
+  if (experience.endDate !== undefined) row.end_date = experience.endDate;
+  if (experience.location !== undefined) row.location = experience.location;
+  if (experience.theme !== undefined) row.theme = experience.theme;
+  if (experience.reflectionsEnabled !== undefined)
+    row.reflections_enabled = experience.reflectionsEnabled;
+  if (experience.roles !== undefined) row.roles = experience.roles;
+  if (experience.paid !== undefined) row.paid = experience.paid;
+  if (experience.estimatedGuestCount !== undefined)
+    row.estimated_guest_count = experience.estimatedGuestCount;
+  if (experience.checkoutSessionId !== undefined)
+    row.checkout_session_id = experience.checkoutSessionId;
+  if (experience.createdBy !== undefined) row.created_by = experience.createdBy;
+  return row;
+}
+
+export async function getExperiences() {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.from(TABLE_NAME).select("*");
+
+  if (error) {
+    console.error("[experiencesStore] getExperiences failed:", error);
+    return [];
   }
-
-  const stored = readFromStorage();
-  if (stored) return stored.map(normalizeExperience);
-
-  writeToStorage(mockExperiences);
-  return mockExperiences.map(normalizeExperience);
+  return data.map(rowToExperience);
 }
 
 // Looks up an experience already created for a given Stripe Checkout
 // Session ID, so the paid-experience creation step (see
 // /experiences/new/success) can be idempotent: if this session already
 // produced an experience, don't create a second one.
-export function getExperienceByCheckoutSessionId(checkoutSessionId) {
+export async function getExperienceByCheckoutSessionId(checkoutSessionId) {
   if (!checkoutSessionId) return null;
-  return (
-    getExperiences().find(
-      (experience) => experience.checkoutSessionId === checkoutSessionId
-    ) ?? null
-  );
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select("*")
+    .eq("checkout_session_id", checkoutSessionId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "[experiencesStore] getExperienceByCheckoutSessionId failed:",
+      error
+    );
+    return null;
+  }
+  return data ? rowToExperience(data) : null;
 }
 
-export function addExperience(experience) {
-  const experiences = getExperiences();
-  const nextId =
-    experiences.reduce((maxId, item) => Math.max(maxId, item.id), 0) + 1;
+export async function addExperience(experience) {
+  const supabase = getSupabaseClient();
+  const createdBy = getOrPromptCreatorName();
 
-  const newExperience = { id: nextId, ...experience };
-  const updatedExperiences = [...experiences, newExperience];
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .insert({ ...experienceToRow(experience), created_by: createdBy })
+    .select()
+    .single();
 
-  writeToStorage(updatedExperiences);
-  return newExperience;
+  if (error) {
+    console.error("[experiencesStore] addExperience failed:", error);
+    throw error;
+  }
+  return rowToExperience(data);
 }
 
-export function updateExperience(id, fields) {
-  const experiences = getExperiences();
-  let updatedExperience = null;
+export async function updateExperience(id, fields) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .update(experienceToRow(fields))
+    .eq("id", id)
+    .select()
+    .single();
 
-  const updatedExperiences = experiences.map((experience) => {
-    if (experience.id !== id) return experience;
-    updatedExperience = { ...experience, ...fields };
-    return updatedExperience;
-  });
-
-  writeToStorage(updatedExperiences);
-  return updatedExperience;
+  if (error) {
+    console.error("[experiencesStore] updateExperience failed:", error);
+    return null;
+  }
+  return rowToExperience(data);
 }
 
 // Deletes only the experience record itself. To also remove everything
 // else keyed to this experience (itinerary, guests, photos, etc.), use
 // deleteExperienceCompletely in @/data/deleteExperienceCascade instead —
 // this function alone would leave orphaned data behind.
-export function deleteExperience(id) {
-  const experiences = getExperiences();
-  const updatedExperiences = experiences.filter(
-    (experience) => experience.id !== id
-  );
-  writeToStorage(updatedExperiences);
+export async function deleteExperience(id) {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from(TABLE_NAME).delete().eq("id", id);
+
+  if (error) {
+    console.error("[experiencesStore] deleteExperience failed:", error);
+  }
 }

@@ -2,11 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import mockExperiences from "@/data/mockExperiences";
-import { getExperiences, normalizeExperience } from "@/data/experiencesStore";
+import { getExperiences } from "@/data/experiencesStore";
 
 type Role = "hosted" | "attended";
 type View = "grid" | "list";
+
+type Experience = {
+  id: number;
+  name: string;
+  coverImage: string;
+  startDate: string;
+  endDate: string;
+  location?: string;
+  roles: string[];
+};
 
 const DELETED_TOAST_VISIBLE_DURATION_MS = 3000;
 const DELETED_TOAST_FADE_DURATION_MS = 500;
@@ -93,18 +102,21 @@ function formatDateRange(startDate: string, endDate: string) {
 
 export default function ExperiencesPage() {
   const [activeTab, setActiveTab] = useState<Role>("hosted");
-  const [experiences, setExperiences] = useState(() =>
-    mockExperiences.map(normalizeExperience)
-  );
-  // Read once, synchronously, during render (same lazy-initializer pattern
-  // as deletedExperienceName below) so the persisted view applies from the
-  // very first paint instead of flashing grid-then-list on every visit.
-  const [view, setView] = useState<View>(() => {
-    if (typeof window === "undefined") return "grid";
-    return window.localStorage.getItem(EXPERIENCES_VIEW_STORAGE_KEY) === "list"
-      ? "list"
-      : "grid";
-  });
+  const [experiences, setExperiences] = useState<Experience[]>([]);
+  // Distinguishes "still fetching from Supabase" from "genuinely no
+  // Experiences exist" — without this, the empty state would flash
+  // briefly on every visit before real data arrives.
+  const [isLoadingExperiences, setIsLoadingExperiences] = useState(true);
+  // Always starts as "grid" — a lazy initializer reading localStorage
+  // here (like deletedExperienceName below) would return different values
+  // on the server (no window, always "grid") vs. the client's hydration
+  // pass (window exists, so it could read "list" from a prior visit),
+  // and aria-pressed on the toggle buttons directly reflects this value
+  // in the very first render — a mismatch there is a real hydration
+  // error, not just a cosmetic one. The saved preference is applied after
+  // mount instead (see the effect below), at the cost of a brief
+  // grid-then-list flash on repeat visits that had chosen list.
+  const [view, setView] = useState<View>("grid");
   // Shown only right after landing here from deleting an Experience (via
   // the sessionStorage "justDeleted" flag set right before the redirect),
   // not on normal visits. "Mounted" keeps it in the DOM through the
@@ -122,7 +134,25 @@ export default function ExperiencesPage() {
   );
 
   useEffect(() => {
-    setExperiences(getExperiences());
+    let cancelled = false;
+
+    getExperiences().then((fetched) => {
+      if (cancelled) return;
+      setExperiences(fetched);
+      setIsLoadingExperiences(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Applies the saved view preference once mounted on the client, where
+  // localStorage is actually available — see the note on view's
+  // useState above for why this can't happen during the initial render.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(EXPERIENCES_VIEW_STORAGE_KEY);
+    if (stored === "list") setView("list");
   }, []);
 
   useEffect(() => {
@@ -274,7 +304,11 @@ export default function ExperiencesPage() {
         })}
       </div>
 
-      {filteredExperiences.length === 0 ? (
+      {isLoadingExperiences ? (
+        <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+          Loading…
+        </div>
+      ) : filteredExperiences.length === 0 ? (
         <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           No experiences yet
         </div>

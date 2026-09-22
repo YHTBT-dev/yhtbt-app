@@ -47,14 +47,22 @@ export default function NewItineraryItemPage() {
     dressCodeOption === DRESS_CODE_OTHER ? dressCodeOther : dressCodeOption;
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    if (found) {
-      setExperience(found);
-      setDate(found.startDate);
-    }
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
+      );
+      if (found) {
+        setExperience(found);
+        setDate(found.startDate);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

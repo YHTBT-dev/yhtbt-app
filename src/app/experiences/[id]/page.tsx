@@ -573,11 +573,19 @@ export default function ExperienceDetailPage() {
   }, [wasJustCreated]);
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    setExperience(found ?? null);
+    let cancelled = false;
+
+    // Only the Experience record itself comes from Supabase now — every
+    // other store here is still localStorage (synchronous), so they load
+    // immediately below while this resolves separately.
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
+      );
+      setExperience(found ?? null);
+    });
+
     setCoverImageError(false);
     setItineraryItems(getItineraryItems(params.id));
     setGuests(getGuests(params.id));
@@ -593,6 +601,10 @@ export default function ExperienceDetailPage() {
     setMyReflectionIds(getMyReflectionIds());
     setBookOrders(getBookOrders(params.id));
     setRecommendations(getRecommendations(params.id));
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -1038,7 +1050,11 @@ export default function ExperienceDetailPage() {
     if (!experience) return;
 
     const nextReflectionsEnabled = !experience.reflectionsEnabled;
-    updateExperience(experience.id, {
+    // Optimistic — the UI flips immediately rather than waiting on the
+    // network round-trip; the write itself isn't awaited here, matching
+    // the same fire-and-forget pattern already used for the Supabase
+    // Storage calls elsewhere in this file (e.g. deleteExperiencePhoto).
+    void updateExperience(experience.id, {
       reflectionsEnabled: nextReflectionsEnabled,
     });
     setExperience((current) =>

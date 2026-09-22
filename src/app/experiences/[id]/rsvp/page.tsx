@@ -40,11 +40,19 @@ export default function RsvpPage() {
   const [coverImageError, setCoverImageError] = useState(false);
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    setExperience(found ?? null);
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
+      );
+      setExperience(found ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

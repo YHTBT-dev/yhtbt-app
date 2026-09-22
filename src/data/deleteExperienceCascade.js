@@ -35,5 +35,5 @@ export async function deleteExperienceCompletely(experienceId) {
   await deleteAllReflections(experienceId);
   deleteAllBookOrders(experienceId);
   deleteAllRecommendations(experienceId);
-  deleteExperience(Number(experienceId));
+  await deleteExperience(Number(experienceId));
 }

@@ -270,16 +270,25 @@ export default function KeepsakePage() {
   const originalDocumentTitleRef = useRef("");
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    setExperience(found ?? null);
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
+      );
+      setExperience(found ?? null);
+    });
+
     setItineraryItems(getItineraryItems(params.id));
     setGuests(getGuests(params.id));
     setPhotos(getPhotos(params.id));
     setReflections(getReflections(params.id));
     setCoverImageError(false);
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   // Chrome/Safari's print dialog suggests document.title as the "Save as

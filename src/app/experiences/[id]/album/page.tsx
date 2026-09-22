@@ -35,13 +35,22 @@ export default function AlbumPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    setExperience(found ?? null);
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
+      );
+      setExperience(found ?? null);
+    });
+
     setItineraryItems(getItineraryItems(params.id));
     setPhotos(getPhotos(params.id));
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   if (experience === undefined) {

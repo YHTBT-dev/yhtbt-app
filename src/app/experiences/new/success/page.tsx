@@ -48,7 +48,7 @@ function CheckoutSuccessContent() {
         // effects in dev, and a user could revisit or refresh this URL.
         // If a session already produced an experience, don't create
         // another one.
-        const existing = getExperienceByCheckoutSessionId(sessionId!);
+        const existing = await getExperienceByCheckoutSessionId(sessionId!);
         // coverImage never went through Stripe (see /api/checkout) — it
         // was stashed in sessionStorage before the redirect and is picked
         // back up here, once, at the moment the experience is actually
@@ -58,7 +58,7 @@ function CheckoutSuccessContent() {
         sessionStorage.removeItem(`coverImage:${sessionId}`);
         const finalizedExperience =
           existing ??
-          addExperience({
+          (await addExperience({
             name: data.name,
             coverImage: storedCoverImage,
             startDate: data.startDate,
@@ -69,7 +69,7 @@ function CheckoutSuccessContent() {
             theme: data.theme,
             checkoutSessionId: sessionId,
             paid: true,
-          });
+          }));
 
         if (!cancelled) {
           sessionStorage.setItem("justCreated", String(finalizedExperience.id));

@@ -34,19 +34,29 @@ export default function ExperienceLayout({
   const [theme, setTheme] = useState(DEFAULT_THEME);
 
   useEffect(() => {
-    const experience = getExperiences().find(
-      (item: { id: number; theme?: string }) => String(item.id) === params.id
-    );
-    const resolvedTheme = experience?.theme ?? DEFAULT_THEME;
-    console.log(
-      "[ExperienceLayout] experience id:",
-      params.id,
-      "pathname:",
-      pathname,
-      "resolved theme:",
-      resolvedTheme
-    );
-    setTheme(resolvedTheme);
+    let cancelled = false;
+
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+
+      const experience = experiences.find(
+        (item: { id: number; theme?: string }) => String(item.id) === params.id
+      );
+      const resolvedTheme = experience?.theme ?? DEFAULT_THEME;
+      console.log(
+        "[ExperienceLayout] experience id:",
+        params.id,
+        "pathname:",
+        pathname,
+        "resolved theme:",
+        resolvedTheme
+      );
+      setTheme(resolvedTheme);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id, pathname]);
 
   // bg-background/text-foreground here matter, not just data-theme: <body>

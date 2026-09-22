@@ -55,33 +55,42 @@ export default function EditExperiencePage() {
   const [isEndDateAutoSynced, setIsEndDateAutoSynced] = useState(true);
 
   useEffect(() => {
-    const experiences = getExperiences();
-    const found = experiences.find(
-      (item: Experience) => String(item.id) === params.id
-    );
-    setExperience(found ?? null);
+    let cancelled = false;
 
-    if (found) {
-      setName(found.name);
-      setCoverImage(found.coverImage);
-      // If there's already a plain URL, default to that tab so it's
-      // immediately visible/editable; a data URL (from an upload) or no
-      // image at all defaults to the upload tab instead.
-      setCoverImageInputMode(
-        found.coverImage && !found.coverImage.startsWith("data:")
-          ? "url"
-          : "upload"
+    getExperiences().then((experiences) => {
+      if (cancelled) return;
+
+      const found = experiences.find(
+        (item: Experience) => String(item.id) === params.id
       );
-      setStartDate(found.startDate);
-      setEndDate(found.endDate);
-      setLocation(found.location ?? "");
-      setTheme(found.theme ?? "editorial-classic");
-      setIsHosting(found.roles.includes("hosted"));
-      setIsAttending(found.roles.includes("attended"));
-      // Only keep auto-syncing if the existing record is single-day;
-      // an existing multi-day range is a deliberate choice to respect.
-      setIsEndDateAutoSynced(found.startDate === found.endDate);
-    }
+      setExperience(found ?? null);
+
+      if (found) {
+        setName(found.name);
+        setCoverImage(found.coverImage);
+        // If there's already a plain URL, default to that tab so it's
+        // immediately visible/editable; a data URL (from an upload) or no
+        // image at all defaults to the upload tab instead.
+        setCoverImageInputMode(
+          found.coverImage && !found.coverImage.startsWith("data:")
+            ? "url"
+            : "upload"
+        );
+        setStartDate(found.startDate);
+        setEndDate(found.endDate);
+        setLocation(found.location ?? "");
+        setTheme(found.theme ?? "editorial-classic");
+        setIsHosting(found.roles.includes("hosted"));
+        setIsAttending(found.roles.includes("attended"));
+        // Only keep auto-syncing if the existing record is single-day;
+        // an existing multi-day range is a deliberate choice to respect.
+        setIsEndDateAutoSynced(found.startDate === found.endDate);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   function handleStartDateChange(value: string) {
@@ -123,7 +132,7 @@ export default function EditExperiencePage() {
     }
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!coverImage) {
@@ -149,7 +158,7 @@ export default function EditExperiencePage() {
     ];
 
     console.log("[EditExperiencePage] saving experience.theme:", theme);
-    updateExperience(Number(params.id), {
+    const updated = await updateExperience(Number(params.id), {
       name,
       coverImage,
       startDate,
@@ -158,6 +167,11 @@ export default function EditExperiencePage() {
       roles,
       theme,
     });
+
+    if (!updated) {
+      setError("Could not save changes. Please try again.");
+      return;
+    }
 
     router.push(`/experiences/${params.id}`);
   }
