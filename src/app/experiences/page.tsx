@@ -6,14 +6,50 @@ import mockExperiences from "@/data/mockExperiences";
 import { getExperiences, normalizeExperience } from "@/data/experiencesStore";
 
 type Role = "hosted" | "attended";
+type View = "grid" | "list";
 
 const DELETED_TOAST_VISIBLE_DURATION_MS = 3000;
 const DELETED_TOAST_FADE_DURATION_MS = 500;
+const EXPERIENCES_VIEW_STORAGE_KEY = "yhtbt:experiencesView";
 
 const TABS: { label: string; value: Role }[] = [
   { label: "Hosted", value: "hosted" },
   { label: "Attended", value: "attended" },
 ];
+
+function GridIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      className="h-4 w-4"
+    >
+      <rect x="2.5" y="2.5" width="6" height="6" />
+      <rect x="11.5" y="2.5" width="6" height="6" />
+      <rect x="2.5" y="11.5" width="6" height="6" />
+      <rect x="11.5" y="11.5" width="6" height="6" />
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      className="h-4 w-4"
+    >
+      <line x1="3" y1="5" x2="17" y2="5" />
+      <line x1="3" y1="10" x2="17" y2="10" />
+      <line x1="3" y1="15" x2="17" y2="15" />
+    </svg>
+  );
+}
 
 // Parses a plain "YYYY-MM-DD" string as a local calendar date instead of
 // letting `new Date(string)` treat it as UTC, which can shift the date by
@@ -60,6 +96,15 @@ export default function ExperiencesPage() {
   const [experiences, setExperiences] = useState(() =>
     mockExperiences.map(normalizeExperience)
   );
+  // Read once, synchronously, during render (same lazy-initializer pattern
+  // as deletedExperienceName below) so the persisted view applies from the
+  // very first paint instead of flashing grid-then-list on every visit.
+  const [view, setView] = useState<View>(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem(EXPERIENCES_VIEW_STORAGE_KEY) === "list"
+      ? "list"
+      : "grid";
+  });
   // Shown only right after landing here from deleting an Experience (via
   // the sessionStorage "justDeleted" flag set right before the redirect),
   // not on normal visits. "Mounted" keeps it in the DOM through the
@@ -132,6 +177,11 @@ export default function ExperiencesPage() {
     ).id;
   }, [filteredExperiences]);
 
+  function handleSetView(nextView: View) {
+    setView(nextView);
+    window.localStorage.setItem(EXPERIENCES_VIEW_STORAGE_KEY, nextView);
+  }
+
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
       {isDeletedToastMounted ? (
@@ -153,12 +203,43 @@ export default function ExperiencesPage() {
           Your Experiences
         </h1>
 
-        <Link
-          href="/experiences/new"
-          className="shrink-0 border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-        >
-          Create Experience
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex border border-foreground/10">
+            <button
+              type="button"
+              onClick={() => handleSetView("grid")}
+              aria-label="Grid view"
+              aria-pressed={view === "grid"}
+              className={`p-2 transition-colors ${
+                view === "grid"
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted hover:text-accent"
+              }`}
+            >
+              <GridIcon />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetView("list")}
+              aria-label="List view"
+              aria-pressed={view === "list"}
+              className={`border-l border-foreground/10 p-2 transition-colors ${
+                view === "list"
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted hover:text-accent"
+              }`}
+            >
+              <ListIcon />
+            </button>
+          </div>
+
+          <Link
+            href="/experiences/new"
+            className="border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          >
+            Create Experience
+          </Link>
+        </div>
       </div>
 
       {/* Dev-only: remove before shipping */}
@@ -197,7 +278,7 @@ export default function ExperiencesPage() {
         <div className="flex min-h-[40vh] items-center justify-center text-center font-serif text-lg text-muted italic">
           No experiences yet
         </div>
-      ) : (
+      ) : view === "grid" ? (
         <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
           {filteredExperiences.map((experience) => (
             <Link
@@ -224,6 +305,41 @@ export default function ExperiencesPage() {
                 </p>
                 <p className="mt-1 text-sm text-foreground/60">
                   {formatDateRange(experience.startDate, experience.endDate)}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-10 flex flex-col divide-y divide-foreground/10 border-t border-b border-foreground/10">
+          {filteredExperiences.map((experience) => (
+            <Link
+              key={experience.id}
+              href={`/experiences/${experience.id}`}
+              className="group flex items-center gap-4 py-3 transition-colors hover:bg-foreground/5"
+            >
+              <div className="h-12 w-12 shrink-0 overflow-hidden bg-foreground/5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={experience.coverImage}
+                  alt={experience.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate font-serif text-base text-foreground transition-colors group-hover:text-accent">
+                    {experience.name}
+                  </p>
+                  {experience.id === upNextExperienceId ? (
+                    <span className="shrink-0 border border-accent/30 bg-background px-1.5 py-0.5 text-[10px] tracking-widest text-accent uppercase">
+                      Up Next
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-0.5 truncate text-xs text-foreground/60">
+                  {formatDateRange(experience.startDate, experience.endDate)}
+                  {experience.location ? ` · ${experience.location}` : ""}
                 </p>
               </div>
             </Link>
