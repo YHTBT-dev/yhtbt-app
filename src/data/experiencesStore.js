@@ -3,6 +3,19 @@ import { getOrPromptCreatorName } from "@/lib/creatorName";
 
 const TABLE_NAME = "experiences";
 
+// Optional categorization used to drive the "Suggest FAQs" checklist (see
+// suggestedFaqsStore.js) — doesn't gate or block Experience creation.
+export const EXPERIENCE_TYPES = [
+  "Wedding",
+  "Birthday/Celebration",
+  "Destination Trip/Group Getaway",
+  "Corporate Retreat/Offsite",
+  "Conference/Professional Event",
+  "Dinner/Party/Social Event",
+  "Wellness/Activity-Based Event",
+  "Other",
+];
+
 // The first store migrated off localStorage onto Supabase (see the
 // "experiences" table + RLS policies set up alongside this change) —
 // every function here is now async, since a real network request replaces
@@ -38,6 +51,7 @@ function rowToExperience(row) {
     estimatedGuestCount: row.estimated_guest_count ?? null,
     checkoutSessionId: row.checkout_session_id ?? null,
     createdBy: row.created_by ?? "",
+    experienceType: row.experience_type ?? "",
   };
 }
 
@@ -61,6 +75,8 @@ function experienceToRow(experience) {
   if (experience.checkoutSessionId !== undefined)
     row.checkout_session_id = experience.checkoutSessionId;
   if (experience.createdBy !== undefined) row.created_by = experience.createdBy;
+  if (experience.experienceType !== undefined)
+    row.experience_type = experience.experienceType;
   return row;
 }
 

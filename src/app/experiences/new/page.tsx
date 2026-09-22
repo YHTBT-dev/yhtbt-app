@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addExperience } from "@/data/experiencesStore";
+import { addExperience, EXPERIENCE_TYPES } from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
 import { getTodayLocalDateString } from "@/lib/format";
 import ThemePicker from "@/components/ThemePicker";
@@ -32,6 +32,7 @@ export default function NewExperiencePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
+  const [experienceType, setExperienceType] = useState("");
   const [estimatedGuestCount, setEstimatedGuestCount] = useState("");
   const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(true);
@@ -131,6 +132,7 @@ export default function NewExperiencePage() {
           endDate,
           location,
           roles,
+          experienceType,
           estimatedGuestCount: guestCount,
           theme,
           paid: false,
@@ -168,6 +170,7 @@ export default function NewExperiencePage() {
           roles,
           estimatedGuestCount: guestCount,
           theme,
+          experienceType,
         }),
       });
 
@@ -323,6 +326,22 @@ export default function NewExperiencePage() {
             placeholder="Los Angeles, CA"
             className={FIELD_CLASSES}
           />
+        </label>
+
+        <label className="block">
+          <span className={LABEL_CLASSES}>Experience Type (Optional)</span>
+          <select
+            value={experienceType}
+            onChange={(event) => setExperienceType(event.target.value)}
+            className={FIELD_CLASSES}
+          >
+            <option value="">None</option>
+            {EXPERIENCE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="flex flex-col gap-3">

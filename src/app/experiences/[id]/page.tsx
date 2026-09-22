@@ -16,7 +16,8 @@ import {
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
-import { addFaq, getFaqs } from "@/data/faqsStore";
+import { addFaq, getFaqs, updateFaq } from "@/data/faqsStore";
+import { getSuggestedFaqQuestions } from "@/data/suggestedFaqs";
 import {
   addPoll,
   getPolls,
@@ -124,6 +125,7 @@ type Experience = {
   location?: string;
   roles: string[];
   reflectionsEnabled: boolean;
+  experienceType?: string;
 };
 
 type ItineraryItem = {
@@ -466,6 +468,14 @@ export default function ExperienceDetailPage() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [editingFaqId, setEditingFaqId] = useState<number | null>(null);
+  const [faqEditDraft, setFaqEditDraft] = useState<Record<string, string>>(
+    {}
+  );
+  const [faqEditError, setFaqEditError] = useState("");
+  const [isSuggestFaqsModalOpen, setIsSuggestFaqsModalOpen] = useState(false);
+  const [selectedSuggestedQuestions, setSelectedSuggestedQuestions] =
+    useState<string[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [votedPollIds, setVotedPollIds] = useState<number[]>([]);
   const [pollQuestion, setPollQuestion] = useState("");
@@ -678,6 +688,86 @@ export default function ExperienceDetailPage() {
     setIsFaqModalOpen(false);
     setFaqQuestion("");
     setFaqAnswer("");
+  }
+
+  function handleStartEditFaq(faq: Faq) {
+    setEditingFaqId(faq.id);
+    setFaqEditError("");
+    setFaqEditDraft({ question: faq.question, answer: faq.answer });
+  }
+
+  function handleFaqEditDraftChange(field: string, value: string) {
+    setFaqEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditFaq() {
+    setEditingFaqId(null);
+    setFaqEditDraft({});
+    setFaqEditError("");
+  }
+
+  function handleSaveEditFaq(faq: Faq) {
+    const draft = faqEditDraft;
+
+    if (!draft.question?.trim()) {
+      setFaqEditError("Enter a question.");
+      return;
+    }
+
+    const updatedFaq = updateFaq(faq.id, {
+      question: draft.question.trim(),
+      answer: (draft.answer ?? "").trim(),
+    });
+    if (updatedFaq) {
+      setFaqs((current) =>
+        current.map((item) => (item.id === faq.id ? updatedFaq : item))
+      );
+    }
+
+    setEditingFaqId(null);
+    setFaqEditDraft({});
+    setFaqEditError("");
+  }
+
+  function handleOpenSuggestFaqsModal() {
+    setSelectedSuggestedQuestions([]);
+    setIsSuggestFaqsModalOpen(true);
+  }
+
+  function handleCloseSuggestFaqsModal() {
+    setIsSuggestFaqsModalOpen(false);
+    setSelectedSuggestedQuestions([]);
+  }
+
+  function handleToggleSuggestedQuestion(question: string) {
+    setSelectedSuggestedQuestions((current) =>
+      current.includes(question)
+        ? current.filter((item) => item !== question)
+        : [...current, question]
+    );
+  }
+
+  // Each selected question becomes its own draft FAQ — question
+  // pre-filled, answer left blank — so the host fills in answers (and can
+  // still tweak the question wording) the same way they'd edit any other
+  // FAQ entry, via the Edit control added to each row below.
+  function handleAddSelectedSuggestedFaqs() {
+    if (selectedSuggestedQuestions.length === 0) {
+      setIsSuggestFaqsModalOpen(false);
+      return;
+    }
+
+    const newFaqs = selectedSuggestedQuestions.map((question) =>
+      addFaq({
+        experienceId: params.id,
+        question,
+        answer: "",
+      })
+    );
+
+    setFaqs((current) => [...current, ...newFaqs]);
+    setIsSuggestFaqsModalOpen(false);
+    setSelectedSuggestedQuestions([]);
   }
 
   function handlePollOptionChange(index: number, value: string) {
@@ -1846,7 +1936,14 @@ export default function ExperienceDetailPage() {
         {collapsedSections.faqs ? null : (
           <>
             {isPreviewingAsGuest ? null : (
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={handleOpenSuggestFaqsModal}
+                className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+              >
+                Suggest FAQs
+              </button>
               <button
                 type="button"
                 onClick={() => setIsFaqModalOpen(true)}
@@ -1902,25 +1999,158 @@ export default function ExperienceDetailPage() {
               </form>
             </Modal>
 
+            <Modal
+              isOpen={isSuggestFaqsModalOpen}
+              onClose={handleCloseSuggestFaqsModal}
+              title="Suggest FAQs"
+            >
+              <div className="flex flex-col gap-6">
+                <p className="text-sm text-muted">
+                  Based on this Experience&apos;s type
+                  {experience.experienceType
+                    ? ` (${experience.experienceType})`
+                    : ""}
+                  , here are some commonly asked questions. Selected ones
+                  are added as drafts with the question pre-filled — fill
+                  in (or tweak) the wording afterward.
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  {getSuggestedFaqQuestions(experience.experienceType ?? "").map(
+                    (question: string) => (
+                      <label
+                        key={question}
+                        className="flex items-start gap-3"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSuggestedQuestions.includes(
+                            question
+                          )}
+                          onChange={() =>
+                            handleToggleSuggestedQuestion(question)
+                          }
+                          className="mt-1 h-4 w-4 accent-accent"
+                        />
+                        <span className="font-serif text-lg text-foreground">
+                          {question}
+                        </span>
+                      </label>
+                    )
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddSelectedSuggestedFaqs}
+                  disabled={selectedSuggestedQuestions.length === 0}
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add Selected
+                </button>
+              </div>
+            </Modal>
+
             {faqs.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No FAQs yet
               </div>
             ) : (
               <div className="mt-10 flex flex-col gap-8">
-                {faqs.map((faq) => (
+                {faqs.map((faq) => {
+                  if (editingFaqId === faq.id) {
+                    const draft = faqEditDraft;
+                    return (
+                      <div
+                        key={faq.id}
+                        className="flex flex-col gap-6 border border-foreground/10 p-4"
+                      >
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Question
+                          </span>
+                          <input
+                            type="text"
+                            required
+                            value={draft.question ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "question",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Answer
+                          </span>
+                          <textarea
+                            rows={3}
+                            value={draft.answer ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "answer",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        {faqEditError ? (
+                          <p className="text-sm text-red-600">{faqEditError}</p>
+                        ) : null}
+
+                        <div className="flex gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditFaq(faq)}
+                            className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditFaq}
+                            className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
                   <div
                     key={faq.id}
-                    className="border-b border-foreground/10 pb-8 last:border-b-0"
+                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-8 last:border-b-0"
                   >
-                    <p className="font-serif text-lg text-foreground">
-                      {faq.question}
-                    </p>
-                    <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
-                      {faq.answer}
-                    </p>
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {faq.question}
+                      </p>
+                      <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
+                        {faq.answer || (
+                          <span className="italic">No answer yet</span>
+                        )}
+                      </p>
+                    </div>
+                    {isPreviewingAsGuest ? null : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditFaq(faq)}
+                        className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

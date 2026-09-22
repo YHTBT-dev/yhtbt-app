@@ -39,6 +39,20 @@ export function addFaq(faq) {
   return newFaq;
 }
 
+export function updateFaq(id, fields) {
+  const faqs = getAllFaqs();
+  let updatedFaq = null;
+
+  const updatedFaqs = faqs.map((faq) => {
+    if (faq.id !== id) return faq;
+    updatedFaq = { ...faq, ...fields };
+    return updatedFaq;
+  });
+
+  writeToStorage(updatedFaqs);
+  return updatedFaq;
+}
+
 // Removes every FAQ for an experience — used when the experience itself
 // is deleted, so nothing is left orphaned.
 export function deleteAllForExperience(experienceId) {

@@ -67,6 +67,7 @@ function CheckoutSuccessContent() {
             roles: data.roles,
             estimatedGuestCount: data.estimatedGuestCount,
             theme: data.theme,
+            experienceType: data.experienceType,
             checkoutSessionId: sessionId,
             paid: true,
           }));

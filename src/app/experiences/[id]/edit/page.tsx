@@ -3,7 +3,11 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getExperiences, updateExperience } from "@/data/experiencesStore";
+import {
+  EXPERIENCE_TYPES,
+  getExperiences,
+  updateExperience,
+} from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
 import { getTodayLocalDateString } from "@/lib/format";
 import ThemePicker from "@/components/ThemePicker";
@@ -29,6 +33,7 @@ type Experience = {
   location?: string;
   roles: string[];
   theme?: string;
+  experienceType?: string;
 };
 
 export default function EditExperiencePage() {
@@ -43,6 +48,7 @@ export default function EditExperiencePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
+  const [experienceType, setExperienceType] = useState("");
   const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(false);
   const [isAttending, setIsAttending] = useState(false);
@@ -81,6 +87,7 @@ export default function EditExperiencePage() {
         setStartDate(found.startDate);
         setEndDate(found.endDate);
         setLocation(found.location ?? "");
+        setExperienceType(found.experienceType ?? "");
         setTheme(found.theme ?? "editorial-classic");
         setIsHosting(found.roles.includes("hosted"));
         setIsAttending(found.roles.includes("attended"));
@@ -168,6 +175,7 @@ export default function EditExperiencePage() {
       location,
       roles,
       theme,
+      experienceType,
     });
 
     if (!updated) {
@@ -327,6 +335,22 @@ export default function EditExperiencePage() {
             placeholder="Los Angeles, CA"
             className={FIELD_CLASSES}
           />
+        </label>
+
+        <label className="block">
+          <span className={LABEL_CLASSES}>Experience Type (Optional)</span>
+          <select
+            value={experienceType}
+            onChange={(event) => setExperienceType(event.target.value)}
+            className={FIELD_CLASSES}
+          >
+            <option value="">None</option>
+            {EXPERIENCE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="flex flex-col gap-3">
