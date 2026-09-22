@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
@@ -16,6 +16,7 @@ import {
   formatTimeRange,
   getPhotoDownloadFilename,
   groupByDate,
+  sanitizeForFilename,
 } from "@/lib/format";
 
 const BOOK_ORDER_FIELD_CLASSES =
@@ -157,6 +158,7 @@ export default function KeepsakePage() {
   const [country, setCountry] = useState("");
   const [bookOrderError, setBookOrderError] = useState("");
   const [isSubmittingBookOrder, setIsSubmittingBookOrder] = useState(false);
+  const originalDocumentTitleRef = useRef("");
 
   useEffect(() => {
     const experiences = getExperiences();
@@ -170,6 +172,38 @@ export default function KeepsakePage() {
     setReflections(getReflections(params.id));
     setCoverImageError(false);
   }, [params.id]);
+
+  // Chrome/Safari's print dialog suggests document.title as the "Save as
+  // PDF" filename — without this it's stuck on the app's static default
+  // ("Create Next App", set once in the root layout). beforeprint/afterprint
+  // fire around ANY print trigger (the button below, but also Cmd/Ctrl+P
+  // or a browser print menu item), so the swap is scoped to those events
+  // rather than just the button's onClick, and the original title is
+  // always restored afterward — this only ever affects the tab title for
+  // the duration of the print dialog being open, never permanently.
+  useEffect(() => {
+    originalDocumentTitleRef.current = document.title;
+  }, []);
+
+  useEffect(() => {
+    function handleBeforePrint() {
+      if (!experience) return;
+      document.title =
+        sanitizeForFilename(experience.name) || originalDocumentTitleRef.current;
+    }
+
+    function handleAfterPrint() {
+      document.title = originalDocumentTitleRef.current;
+    }
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+      document.title = originalDocumentTitleRef.current;
+    };
+  }, [experience]);
 
   function handleOpenBookOrderModal() {
     setBookOrderError("");
@@ -263,19 +297,26 @@ export default function KeepsakePage() {
   const confirmedGuests = guests.filter((guest) => guest.everConfirmed);
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-16 sm:px-8 sm:py-24">
+    <main className="keepsake-print mx-auto w-full max-w-4xl px-4 py-16 sm:px-8 sm:py-24">
       <Link
         href="/experiences"
-        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        className="keepsake-print-hide block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         &larr; Back to My Experiences
       </Link>
       <Link
         href={`/experiences/${params.id}`}
-        className="mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         Back to {experience.name}
       </Link>
+      <button
+        type="button"
+        onClick={() => window.print()}
+        className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      >
+        Download as PDF
+      </button>
 
       {experience.coverImage && !coverImageError ? (
         <div className="mt-8 h-72 w-full overflow-hidden sm:h-96">
@@ -324,7 +365,7 @@ export default function KeepsakePage() {
       </div>
 
       {groupedItinerary.length > 0 ? (
-        <section className="mt-24">
+        <section className="keepsake-print-page-break mt-24">
           <h2 className="text-center font-serif text-2xl text-foreground">
             The Itinerary
           </h2>
@@ -335,9 +376,12 @@ export default function KeepsakePage() {
                 <h3 className="font-serif text-xl text-accent">
                   {formatDateHeading(group.date)}
                 </h3>
-                <div className="mt-6 flex flex-col gap-8 border-l border-foreground/15 pl-8">
+                <div className="keepsake-print-itinerary-line mt-6 flex flex-col gap-8 border-l border-foreground/15 pl-8">
                   {group.items.map((item) => (
-                    <div key={item.id} className="relative">
+                    <div
+                      key={item.id}
+                      className="relative break-inside-avoid keepsake-print-avoid-break"
+                    >
                       <span className="absolute top-2 -left-[calc(2rem+3px)] h-1.5 w-1.5 rounded-full bg-accent" />
                       <p className="text-sm text-muted">
                         {formatTimeRange(item)}
@@ -370,7 +414,7 @@ export default function KeepsakePage() {
       ) : null}
 
       {photos.length > 0 ? (
-        <section className="mt-24">
+        <section className="keepsake-print-page-break mt-24">
           <h2 className="text-center font-serif text-2xl text-foreground">
             The Album
           </h2>
@@ -385,7 +429,7 @@ export default function KeepsakePage() {
                   {group.photos.map((photo, index) => (
                     <div
                       key={photo.id}
-                      className={`group relative overflow-hidden bg-foreground/5 ${getPhotoSpanClasses(
+                      className={`group relative overflow-hidden bg-foreground/5 break-inside-avoid keepsake-print-avoid-break ${getPhotoSpanClasses(
                         index
                       )}`}
                     >
@@ -407,7 +451,7 @@ export default function KeepsakePage() {
                             )
                           )
                         }
-                        className="absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
+                        className="keepsake-print-hide absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
                       >
                         Save to device
                       </button>
@@ -426,7 +470,7 @@ export default function KeepsakePage() {
                   {otherPhotos.map((photo, index) => (
                     <div
                       key={photo.id}
-                      className={`group relative overflow-hidden bg-foreground/5 ${getPhotoSpanClasses(
+                      className={`group relative overflow-hidden bg-foreground/5 break-inside-avoid keepsake-print-avoid-break ${getPhotoSpanClasses(
                         index
                       )}`}
                     >
@@ -444,7 +488,7 @@ export default function KeepsakePage() {
                             getPhotoDownloadFilename(experience.name, photo)
                           )
                         }
-                        className="absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
+                        className="keepsake-print-hide absolute right-2 bottom-2 bg-background/80 px-2 py-1 text-[11px] text-foreground/60 opacity-0 underline underline-offset-2 transition-opacity hover:text-accent group-hover:opacity-100"
                       >
                         Save to device
                       </button>
@@ -458,7 +502,7 @@ export default function KeepsakePage() {
       ) : null}
 
       {reflections.length > 0 ? (
-        <section className="mt-24">
+        <section className="keepsake-print-page-break mt-24">
           <h2 className="text-center font-serif text-2xl text-foreground">
             Reflections
           </h2>
@@ -467,14 +511,18 @@ export default function KeepsakePage() {
               a keepsake should read as composed and orderly, not casual,
               so PolaroidCard is rendered here with rotate={false} and no
               onDelete (this is a read-only compiled view). */}
-          <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="keepsake-print-reflections-grid mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3">
             {reflections.map((reflection) => (
-              <PolaroidCard
+              <div
                 key={reflection.id}
-                reflection={reflection}
-                rotate={false}
-                onExpand={setExpandedReflection}
-              />
+                className="break-inside-avoid keepsake-print-avoid-break"
+              >
+                <PolaroidCard
+                  reflection={reflection}
+                  rotate={false}
+                  onExpand={setExpandedReflection}
+                />
+              </div>
             ))}
           </div>
         </section>
@@ -486,7 +534,7 @@ export default function KeepsakePage() {
       />
 
       <section className="mt-24">
-        <h2 className="text-center font-serif text-2xl text-foreground">
+        <h2 className="keepsake-print-avoid-break-after text-center font-serif text-2xl text-foreground">
           Who Was There
         </h2>
         {confirmedGuests.length > 0 ? (
@@ -500,7 +548,7 @@ export default function KeepsakePage() {
         )}
       </section>
 
-      <div className="mt-24 flex flex-col items-center gap-3 text-center">
+      <div className="keepsake-print-hide mt-24 flex flex-col items-center gap-3 text-center">
         <p className="font-serif text-lg text-foreground/70 italic">
           Want to hold onto this one?
         </p>
@@ -632,7 +680,7 @@ export default function KeepsakePage() {
 
       <span
         aria-hidden="true"
-        className="pointer-events-none fixed right-4 bottom-4 text-[10px] tracking-[0.3em] text-foreground/20 uppercase select-none sm:right-6 sm:bottom-6"
+        className="keepsake-print-watermark pointer-events-none fixed right-4 bottom-4 text-[10px] tracking-[0.3em] text-foreground/20 uppercase select-none sm:right-6 sm:bottom-6"
       >
         YHTBT
       </span>

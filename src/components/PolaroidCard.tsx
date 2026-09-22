@@ -165,6 +165,7 @@ export function PolaroidCard<T extends PolaroidReflection>({
               }
             : undefined
         }
+        className="polaroid-card"
         style={{
           background: POLAROID_BG,
           boxShadow: "0 10px 25px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",
@@ -173,7 +174,7 @@ export function PolaroidCard<T extends PolaroidReflection>({
         }}
       >
         <div
-          className="aspect-square w-full"
+          className="polaroid-frame aspect-square w-full"
           style={{
             boxSizing: "border-box",
             border: POLAROID_FRAME_BORDER,
@@ -199,6 +200,7 @@ export function PolaroidCard<T extends PolaroidReflection>({
             />
           ) : (
             <p
+              className="polaroid-main-text"
               style={{
                 fontFamily: "var(--font-caveat), cursive",
                 fontWeight: 600,
@@ -222,8 +224,9 @@ export function PolaroidCard<T extends PolaroidReflection>({
           )}
         </div>
 
-        <div style={{ padding: "12px 4px 34px" }}>
+        <div className="polaroid-footer" style={{ padding: "12px 4px 34px" }}>
           <p
+            className="polaroid-prompt"
             style={{
               margin: 0,
               fontSize: "10px",
@@ -236,6 +239,7 @@ export function PolaroidCard<T extends PolaroidReflection>({
           </p>
           {reflection.photo ? (
             <p
+              className="polaroid-caption"
               style={{
                 margin: "4px 0 0",
                 fontFamily: "var(--font-caveat), cursive",

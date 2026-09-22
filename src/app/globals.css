@@ -246,3 +246,147 @@ body {
 .note-editor .ql-snow.ql-toolbar button.ql-active .ql-fill {
   fill: var(--accent);
 }
+
+/* Keepsake "Download as PDF" (window.print()) — scoped under
+   .keepsake-print (the keepsake page's own wrapper, see
+   /experiences/[id]/keepsake/page.tsx) rather than a site-wide print
+   stylesheet, since no other page in the app is meant to be printed yet. */
+@media print {
+  .keepsake-print-hide {
+    display: none !important;
+  }
+
+  /* Starts a section on its own page. break-before is the current
+     standard property name; page-break-before is the older alias some
+     print engines still key off — both set together for broad support. */
+  .keepsake-print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Browsers strip background colors/images by default when printing (an
+     ink-saving default), which would otherwise silently blank out the
+     Reflections polaroid cards' muted no-photo tint fills and inset-frame
+     shadow even though every other style survives untouched.
+     -webkit-print-color-adjust is Safari's pre-standardization name for
+     the same property as the unprefixed print-color-adjust below; both
+     are set for broad support. */
+  .keepsake-print,
+  .keepsake-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* The keepsake's text (headings, body copy, labels) normally reads
+     through theme tokens like --foreground/--muted/--accent, which on a
+     dark theme (e.g. Midnight Edition) resolve to a near-white color —
+     meant to sit on that theme's own dark background. This forces the
+     printed page's background to white and every text color to a fixed
+     dark ink regardless of the active theme: paper doesn't have a "dark
+     mode", and without this, printing would leave near-white text
+     stranded on the browser's own default white print canvas (the outer
+     [data-theme] wrapper's dark background lives above .keepsake-print
+     and isn't part of this rule, so it doesn't carry over to print
+     either). !important is required here since it's overriding each
+     element's own Tailwind text-color utility (text-foreground etc.),
+     not just an inherited default — and, deliberately, it also reaches
+     the Reflections polaroid cards' inline-styled text (prompt label,
+     response, attribution), which already use a fixed near-black on
+     screen but are covered here too so print never depends on that
+     staying true. */
+  .keepsake-print {
+    background: #ffffff !important;
+  }
+
+  .keepsake-print,
+  .keepsake-print * {
+    color: #1b1a17 !important;
+  }
+
+  /* Reinforces position: fixed (already set via Tailwind's `fixed` class
+     in the markup) specifically for print — a plain "fixed" element can
+     be inconsistent about repeating on every page across a print engine's
+     page breaks, so this is declared explicitly here rather than relying
+     on the screen-media rule alone. */
+  .keepsake-print-watermark {
+    position: fixed !important;
+  }
+
+  /* Tailwind's break-inside-avoid utility only sets the modern
+     break-inside property, not the older page-break-inside alias some
+     print engines still key off — applied here (in addition to that
+     utility, already on itinerary items, photo tiles, and reflection
+     cards) as the belt-and-braces version, since an itinerary item
+     splitting its time/title/location/dress-code block across two pages
+     is exactly the kind of awkward break this is meant to prevent. */
+  .keepsake-print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* "Who Was There"'s heading landing at the bottom of one page with the
+     guest names starting on the next reads as broken; break-after: avoid
+     keeps the heading attached to at least the next few lines of content,
+     pushing the whole group to the next page together if it doesn't fit
+     rather than splitting them. */
+  .keepsake-print-avoid-break-after {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* The itinerary's vertical timeline line reads fine on screen at a low
+     opacity of the current theme's foreground, but on a dark theme (e.g.
+     Midnight Edition) that foreground is a near-white color — at 15%
+     opacity against this stylesheet's forced-white print background,
+     it's close to invisible. A fixed light tan-gray (not a theme color,
+     for the same reason the rest of this print stylesheet avoids them —
+     some themes' accents would be just as faint) reads as a subtle guide
+     line rather than a bold divider, without going dark enough to compete
+     with the connector dots. Deliberately left at the default 1px width
+     (no override here) rather than thickened, as an earlier pass tried —
+     the connector dot's own -left offset in the markup below was tuned
+     against that 1px line's visual center, and widening the line without
+     re-tuning the dot's offset to match is what threw the two out of
+     alignment. The live web view keeps its original lighter, theme-aware
+     color untouched. */
+  .keepsake-print-itinerary-line {
+    border-left-color: #c8c1b6 !important;
+  }
+
+  /* Forces a fixed 3-column grid for the Reflections section in print,
+     rather than trusting Tailwind's sm:/lg: breakpoints to land the same
+     way inside a print engine's page-width viewport as they do on
+     screen — that mismatch is what made the section default to a single,
+     oversized column per row. Paired with the polaroid-card overrides
+     below (smaller padding/font sizes) so more cards fit per page. */
+  .keepsake-print-reflections-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 1rem !important;
+  }
+
+  /* Scaled-down polaroid card for print — these target the class hooks
+     added in PolaroidCard.tsx alongside its existing inline styles.
+     !important is required because a stylesheet rule (even outside the
+     cascade layers Tailwind's own utilities use) only overrides an
+     element's inline style when marked important; without it these
+     inline pixel values would win regardless of what's written here. */
+  .keepsake-print .polaroid-card {
+    padding: 8px 8px 0 !important;
+  }
+
+  .keepsake-print .polaroid-footer {
+    padding: 8px 2px 16px !important;
+  }
+
+  .keepsake-print .polaroid-prompt {
+    font-size: 8px !important;
+  }
+
+  .keepsake-print .polaroid-main-text {
+    font-size: 15px !important;
+  }
+
+  .keepsake-print .polaroid-caption {
+    font-size: 14px !important;
+  }
+}
