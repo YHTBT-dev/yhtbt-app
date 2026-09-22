@@ -217,6 +217,7 @@ export function PolaroidCard<T extends PolaroidReflection>({
                 WebkitLineClamp: REFLECTION_MAIN_LINE_CLAMP,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden",
+                overflowWrap: "break-word",
               }}
             >
               {mainTruncated!.text}
@@ -247,6 +248,12 @@ export function PolaroidCard<T extends PolaroidReflection>({
                 fontSize: "20px",
                 lineHeight: 1.2,
                 color: POLAROID_TEXT,
+                // A long unbroken string (e.g. a URL typed into the
+                // response) has no natural break point, so without this
+                // it overflows the card horizontally instead of wrapping
+                // — unlike the no-photo main text above, this element has
+                // no overflow:hidden safety net of its own.
+                overflowWrap: "break-word",
               }}
             >
               {captionTruncated!.text}
@@ -343,7 +350,7 @@ export function PolaroidExpandModal({
           <p className="text-sm tracking-wide text-muted uppercase">
             {reflection.promptText}
           </p>
-          <p className="font-serif text-lg text-foreground">
+          <p className="font-serif text-lg text-foreground break-words">
             {reflection.responseText}
           </p>
           <p className="text-xs text-muted">{getAttributionLine(reflection)}</p>

@@ -1,9 +1,12 @@
 const STORAGE_KEY = "yhtbt:guests";
 
-// Guest shape: { id, experienceId, name, email, rsvpStatus, everConfirmed }.
-// rsvpStatus is one of "invited", "confirmed", "declined". everConfirmed is
-// a permanent record: once true, it stays true even if rsvpStatus later
-// changes away from "confirmed" — it powers the Attendee Directory.
+// Guest shape: { id, experienceId, name, email, phone, rsvpStatus,
+// everConfirmed }. rsvpStatus is one of "invited", "confirmed",
+// "declined". everConfirmed is a permanent record: once true, it stays
+// true even if rsvpStatus later changes away from "confirmed" — it
+// powers the Attendee Directory. email and phone are both optional
+// individually — the add-guest form only requires at least one contact
+// method between the two, not both.
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
@@ -32,6 +35,7 @@ function getAllGuests() {
 function normalizeGuest(guest) {
   return {
     ...guest,
+    phone: guest.phone ?? "",
     everConfirmed: !!guest.everConfirmed || guest.rsvpStatus === "confirmed",
   };
 }

@@ -9,6 +9,19 @@ export function parseLocalDate(dateString: string | undefined | null) {
   return new Date(year, month - 1, day);
 }
 
+// Today as a local "YYYY-MM-DD" string (not toISOString(), which is UTC
+// and can land on the wrong day depending on the viewer's timezone offset
+// — the same class of bug parseLocalDate above exists to avoid). Every
+// date field in this app is stored/compared in this same shape, so plain
+// string comparison against this is chronologically correct without
+// re-parsing either side into a Date.
+export function getTodayLocalDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export function formatShortDate(dateString: string | undefined) {
   const parsed = parseLocalDate(dateString);
   if (!parsed) return "";

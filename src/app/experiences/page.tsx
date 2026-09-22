@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
+import { getTodayLocalDateString } from "@/lib/format";
 
 type Role = "hosted" | "attended";
 type View = "grid" | "list";
@@ -66,19 +67,6 @@ function ListIcon() {
 function parseLocalDate(dateString: string) {
   const [year, month, day] = dateString.split("-").map(Number);
   return new Date(year, month - 1, day);
-}
-
-// Today as a local "YYYY-MM-DD" string (not toISOString(), which is UTC
-// and can land on the wrong day depending on the viewer's timezone offset
-// — the same class of bug parseLocalDate above exists to avoid). Since
-// startDate is stored in the same YYYY-MM-DD shape, plain string
-// comparison against this is chronologically correct without re-parsing
-// either side into a Date.
-function getTodayLocalDateString() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function formatDateRange(startDate: string, endDate: string) {

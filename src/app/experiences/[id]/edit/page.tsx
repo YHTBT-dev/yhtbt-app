@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
+import { getTodayLocalDateString } from "@/lib/format";
 import ThemePicker from "@/components/ThemePicker";
 
 const FIELD_CLASSES =
@@ -33,6 +34,7 @@ type Experience = {
 export default function EditExperiencePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const today = getTodayLocalDateString();
   const [experience, setExperience] = useState<Experience | null | undefined>(
     undefined
   );
@@ -295,6 +297,7 @@ export default function EditExperiencePage() {
             <input
               type="date"
               required
+              min={today}
               value={startDate}
               onChange={(event) => handleStartDateChange(event.target.value)}
               className={FIELD_CLASSES}
@@ -306,6 +309,7 @@ export default function EditExperiencePage() {
             <input
               type="date"
               required
+              min={today}
               value={endDate}
               onChange={(event) => handleEndDateChange(event.target.value)}
               className={FIELD_CLASSES}

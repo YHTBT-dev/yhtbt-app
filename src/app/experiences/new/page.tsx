@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addExperience } from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
+import { getTodayLocalDateString } from "@/lib/format";
 import ThemePicker from "@/components/ThemePicker";
 
 const FIELD_CLASSES =
@@ -25,6 +26,7 @@ const GUEST_COUNT_FREE_TIER_THRESHOLD = 20;
 
 export default function NewExperiencePage() {
   const router = useRouter();
+  const today = getTodayLocalDateString();
   const [name, setName] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -291,6 +293,7 @@ export default function NewExperiencePage() {
             <input
               type="date"
               required
+              min={today}
               value={startDate}
               onChange={(event) => handleStartDateChange(event.target.value)}
               className={FIELD_CLASSES}
@@ -302,6 +305,7 @@ export default function NewExperiencePage() {
             <input
               type="date"
               required
+              min={today}
               value={endDate}
               onChange={(event) => handleEndDateChange(event.target.value)}
               className={FIELD_CLASSES}
