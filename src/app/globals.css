@@ -27,7 +27,27 @@
    borders and subtle fills) are left as-is — they're already
    theme-correct (opacity of whatever --foreground currently is), just
    not funneled through a named token. */
+/* color-scheme on every theme block below (light for a light background,
+   dark for a dark one): NOT a color token, but a browser signal that
+   custom-property tokens can't substitute for. Author-drawn icons
+   (ChevronIcon, GridIcon, ItineraryTypeIcon, Modal's close icon, etc.)
+   all use stroke/fill="currentColor" already and correctly inherit a
+   theme-aware text color from whatever wraps them — those were audited
+   here and are fine. What isn't reachable by CSS color tokens at all is
+   BROWSER-DRAWN chrome inside native form controls — specifically the
+   calendar/clock icons Chrome/Safari paint inside every
+   input[type="date"] and input[type="time"] in this app (itinerary,
+   travel details, Experience dates). Without color-scheme, the browser
+   assumes a light page and always draws those dark, which is invisible
+   on a dark theme's dark input background. THIS IS THE SECOND TIME a
+   new/dark theme has shipped with an invisible-icon bug that manual
+   testing had to catch (the first was Notes to Self's rich text editor,
+   see the .note-editor rules and their color-adjust comments further
+   down this file) — ANY future theme added here MUST set color-scheme
+   to match its actual background lightness, not just define its color
+   tokens, or this exact bug recurs silently. */
 [data-theme="editorial-classic"] {
+  color-scheme: light;
   --color-bg: #f6f3ec;
   --color-text: #1b1a17;
   --color-text-secondary: rgba(27, 26, 23, 0.6);
@@ -52,6 +72,7 @@
 /* Midnight Press — an ink-and-brass late edition: near-black newsprint,
    warm parchment text, a muted brass accent. */
 [data-theme="midnight-press"] {
+  color-scheme: dark;
   --color-bg: #14161a;
   --color-text: #ece7dd;
   --color-text-secondary: rgba(236, 231, 221, 0.6);
@@ -69,6 +90,7 @@
 /* Conservatory — a quiet botanical palette: soft sage-stone, deep forest
    text, a muted moss accent. */
 [data-theme="conservatory"] {
+  color-scheme: light;
   --color-bg: #eef0e6;
   --color-text: #232a21;
   --color-text-secondary: rgba(35, 42, 33, 0.6);
@@ -87,6 +109,7 @@
    accent (distinct from editorial-classic's rust, though both are in the
    same warm-earth family). */
 [data-theme="terra-rosa"] {
+  color-scheme: light;
   --color-bg: #f6e9dd;
   --color-text: #3a2418;
   --color-text-secondary: rgba(58, 36, 24, 0.6);
@@ -108,6 +131,7 @@
 /* Coastal Light — a quiet seaside palette: pale sea-mist, deep slate text,
    a muted teal accent. */
 [data-theme="coastal-light"] {
+  color-scheme: light;
   --color-bg: #f1f5f4;
   --color-text: #1e2a2e;
   --color-text-secondary: rgba(30, 42, 46, 0.6);
@@ -135,6 +159,7 @@
    light background does, so this uses 70% to keep secondary text legible
    against #1c1b1e specifically. */
 [data-theme="midnight-edition"] {
+  color-scheme: dark;
   --color-bg: #1c1b1e;
   --color-text: #f1ede4;
   --color-text-secondary: rgba(241, 237, 228, 0.7);
