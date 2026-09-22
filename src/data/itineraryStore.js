@@ -1,7 +1,20 @@
 const STORAGE_KEY = "yhtbt:itinerary";
 
 // Item shape: { id, experienceId, date, startTime, endTime, title,
-// description, location, dressCode? }. dressCode is optional.
+// description, location, dressCode?, type }. dressCode is optional. type
+// is pure categorization for a per-item icon on the schedule display —
+// it never triggers extra structured fields; detailed flight/hotel/
+// transport data entry stays exclusively in Travel Details.
+export const ITINERARY_ITEM_TYPES = [
+  "Flight",
+  "Transportation",
+  "Hotel",
+  "Meal",
+  "Event/Excursion",
+  "Generic",
+];
+
+export const DEFAULT_ITINERARY_ITEM_TYPE = "Generic";
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
@@ -31,9 +44,18 @@ function timeToMinutes(time) {
   return hours * 60 + minutes;
 }
 
+// Entries from before "type" existed default to Generic.
+function normalizeItineraryItem(item) {
+  return {
+    ...item,
+    type: item.type ?? DEFAULT_ITINERARY_ITEM_TYPE,
+  };
+}
+
 export function getItineraryItems(experienceId) {
   return getAllItineraryItems()
     .filter((item) => item.experienceId === experienceId)
+    .map(normalizeItineraryItem)
     .sort((a, b) => {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1;
       return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);

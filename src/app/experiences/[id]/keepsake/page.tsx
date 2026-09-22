@@ -10,6 +10,7 @@ import { getPhotos } from "@/data/photosStore";
 import { getReflections } from "@/data/reflectionsStore";
 import Modal from "@/components/Modal";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
+import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import {
   formatDateHeading,
   formatDateRange,
@@ -152,6 +153,7 @@ type ItineraryItem = {
   description: string;
   location: string;
   dressCode?: string;
+  type?: string;
 };
 
 type Guest = {
@@ -504,7 +506,10 @@ export default function KeepsakePage() {
                       <p className="text-sm text-muted">
                         {formatTimeRange(item)}
                       </p>
-                      <p className="mt-1 font-serif text-lg text-foreground">
+                      <p className="mt-1 flex items-center gap-2 font-serif text-lg text-foreground">
+                        <span className="shrink-0 text-muted">
+                          <ItineraryTypeIcon type={item.type ?? "Generic"} />
+                        </span>
                         {item.title}
                       </p>
                       {item.location ? (

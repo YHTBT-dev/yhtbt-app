@@ -4,7 +4,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
-import { getItineraryItems, updateItineraryItem } from "@/data/itineraryStore";
+import {
+  DEFAULT_ITINERARY_ITEM_TYPE,
+  getItineraryItems,
+  ITINERARY_ITEM_TYPES,
+  updateItineraryItem,
+} from "@/data/itineraryStore";
+import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
@@ -39,6 +45,7 @@ type ItineraryItem = {
   description: string;
   location: string;
   dressCode?: string;
+  type?: string;
 };
 
 export default function EditItineraryItemPage() {
@@ -51,6 +58,7 @@ export default function EditItineraryItemPage() {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [type, setType] = useState(DEFAULT_ITINERARY_ITEM_TYPE);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -83,6 +91,7 @@ export default function EditItineraryItemPage() {
       setDate(foundItem.date);
       setStartTime(foundItem.startTime);
       setEndTime(foundItem.endTime);
+      setType(foundItem.type ?? DEFAULT_ITINERARY_ITEM_TYPE);
       setTitle(foundItem.title);
       setDescription(foundItem.description);
       setLocation(foundItem.location);
@@ -116,6 +125,17 @@ export default function EditItineraryItemPage() {
       return;
     }
 
+    // Done here in JS rather than via the time inputs' own `required`
+    // attribute — iOS Safari has a known bug where a required
+    // input[type=time]'s native clear ("x") button doesn't actually work
+    // (WebKit won't let the field go empty via that control while
+    // required is set), so `required` was removed from those inputs
+    // below and this check takes over enforcing it.
+    if (!startTime || !endTime) {
+      setError("Enter a start and end time.");
+      return;
+    }
+
     if (endTime <= startTime) {
       setError("End time must be after start time.");
       return;
@@ -131,6 +151,7 @@ export default function EditItineraryItemPage() {
       description,
       location,
       dressCode,
+      type,
     });
 
     router.push(`/experiences/${params.id}`);
@@ -182,7 +203,6 @@ export default function EditItineraryItemPage() {
             <span className={LABEL_CLASSES}>Start Time</span>
             <input
               type="time"
-              required
               value={startTime}
               onChange={(event) => setStartTime(event.target.value)}
               className={FIELD_CLASSES}
@@ -193,13 +213,32 @@ export default function EditItineraryItemPage() {
             <span className={LABEL_CLASSES}>End Time</span>
             <input
               type="time"
-              required
               value={endTime}
               onChange={(event) => setEndTime(event.target.value)}
               className={FIELD_CLASSES}
             />
           </label>
         </div>
+
+        <label className="block">
+          <span className={LABEL_CLASSES}>Type</span>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="shrink-0 text-muted">
+              <ItineraryTypeIcon type={type} />
+            </span>
+            <select
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+              className={FIELD_CLASSES}
+            >
+              {ITINERARY_ITEM_TYPES.map((itemType) => (
+                <option key={itemType} value={itemType}>
+                  {itemType}
+                </option>
+              ))}
+            </select>
+          </div>
+        </label>
 
         <label className="block">
           <span className={LABEL_CLASSES}>Title</span>

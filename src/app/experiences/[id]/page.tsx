@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
 import { getItineraryItems } from "@/data/itineraryStore";
+import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import { getNote, saveNote } from "@/data/notesStore";
 import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
 import {
@@ -137,6 +138,7 @@ type ItineraryItem = {
   description: string;
   location: string;
   dressCode?: string;
+  type?: string;
 };
 
 type Guest = {
@@ -144,6 +146,7 @@ type Guest = {
   experienceId: string;
   name: string;
   email: string;
+  phone: string;
   rsvpStatus: "invited" | "confirmed" | "declined";
   everConfirmed?: boolean;
 };
@@ -408,6 +411,8 @@ export default function ExperienceDetailPage() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
+  const [guestContactError, setGuestContactError] = useState("");
   const [guestTab, setGuestTab] = useState<GuestTabStatus>("confirmed");
   const [travelDetails, setTravelDetails] = useState<TravelDetail[]>([]);
   const [travelDetailType, setTravelDetailType] =
@@ -1088,16 +1093,24 @@ export default function ExperienceDetailPage() {
   function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guestEmail.trim() && !guestPhone.trim()) {
+      setGuestContactError("Enter an email or a phone number.");
+      return;
+    }
+    setGuestContactError("");
+
     const newGuest = addGuest({
       experienceId: params.id,
       name: guestName,
       email: guestEmail,
+      phone: guestPhone,
       rsvpStatus: "invited",
     });
 
     setGuests((current) => [...current, newGuest]);
     setGuestName("");
     setGuestEmail("");
+    setGuestPhone("");
     setIsGuestModalOpen(false);
   }
 
@@ -1105,6 +1118,8 @@ export default function ExperienceDetailPage() {
     setIsGuestModalOpen(false);
     setGuestName("");
     setGuestEmail("");
+    setGuestPhone("");
+    setGuestContactError("");
   }
 
   function handleCopyInviteLink() {
@@ -1691,6 +1706,12 @@ export default function ExperienceDetailPage() {
                         </span>
                       ) : null}
                       <div className="flex items-baseline gap-2">
+                        <span
+                          className="shrink-0 self-center text-muted"
+                          title={item.type ?? "Generic"}
+                        >
+                          <ItineraryTypeIcon type={item.type ?? "Generic"} />
+                        </span>
                         <p className="font-serif text-lg text-foreground">
                           {item.title}
                         </p>
@@ -2142,13 +2163,33 @@ export default function ExperienceDetailPage() {
               </span>
               <input
                 type="email"
-                required
                 value={guestEmail}
                 onChange={(event) => setGuestEmail(event.target.value)}
                 placeholder="jamie@example.com"
                 className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
               />
             </label>
+
+            <label className="block">
+              <span className="text-sm tracking-wide text-muted uppercase">
+                Phone
+              </span>
+              <input
+                type="tel"
+                value={guestPhone}
+                onChange={(event) => setGuestPhone(event.target.value)}
+                placeholder="(555) 123-4567"
+                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+              />
+            </label>
+
+            <p className="text-sm text-muted">
+              Provide an email or a phone number — at least one is required.
+            </p>
+
+            {guestContactError ? (
+              <p className="text-sm text-red-600">{guestContactError}</p>
+            ) : null}
 
             <button
               type="submit"

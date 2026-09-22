@@ -4,7 +4,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
-import { addItineraryItem } from "@/data/itineraryStore";
+import {
+  addItineraryItem,
+  DEFAULT_ITINERARY_ITEM_TYPE,
+  ITINERARY_ITEM_TYPES,
+} from "@/data/itineraryStore";
+import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
@@ -29,6 +34,18 @@ type Experience = {
   endDate: string;
 };
 
+// Wraps past midnight (23:xx -> 00:xx) rather than clamping — itinerary
+// items don't support crossing midnight (see the endTime <= startTime
+// check below), so a wrapped result just leaves the auto-suggested end
+// time invalid, same as if the user had typed an out-of-range one
+// themselves; the existing submit-time validation catches it either way.
+function addOneHour(timeString: string) {
+  if (!timeString) return "";
+  const [hours, minutes] = timeString.split(":").map(Number);
+  const nextHours = (hours + 1) % 24;
+  return `${String(nextHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 export default function NewItineraryItemPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -36,6 +53,12 @@ export default function NewItineraryItemPage() {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  // Stays true until the user manually sets endTime to something other
+  // than startTime + 1 hour, at which point their explicit choice is
+  // respected — same auto-sync-until-manually-changed pattern already
+  // used for check-in/check-out and Experience start/end dates.
+  const [isEndTimeAutoSynced, setIsEndTimeAutoSynced] = useState(true);
+  const [type, setType] = useState(DEFAULT_ITINERARY_ITEM_TYPE);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -65,6 +88,21 @@ export default function NewItineraryItemPage() {
     };
   }, [params.id]);
 
+  function handleStartTimeChange(value: string) {
+    setStartTime(value);
+
+    if (isEndTimeAutoSynced) {
+      setEndTime(addOneHour(value));
+    }
+  }
+
+  function handleEndTimeChange(value: string) {
+    setEndTime(value);
+    // Sync target is startTime + 1 hour; once the user picks anything
+    // else, respect their manually-chosen duration going forward.
+    if (value !== addOneHour(startTime)) setIsEndTimeAutoSynced(false);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -75,6 +113,17 @@ export default function NewItineraryItemPage() {
       setError(
         `Date must be between ${experience.startDate} and ${experience.endDate}.`
       );
+      return;
+    }
+
+    // Done here in JS rather than via the time inputs' own `required`
+    // attribute — iOS Safari has a known bug where a required
+    // input[type=time]'s native clear ("x") button doesn't actually work
+    // (WebKit won't let the field go empty via that control while
+    // required is set), so `required` was removed from those inputs
+    // below and this check takes over enforcing it.
+    if (!startTime || !endTime) {
+      setError("Enter a start and end time.");
       return;
     }
 
@@ -94,6 +143,7 @@ export default function NewItineraryItemPage() {
       description,
       location,
       dressCode,
+      type,
     });
 
     router.push(`/experiences/${params.id}`);
@@ -131,9 +181,8 @@ export default function NewItineraryItemPage() {
             <span className={LABEL_CLASSES}>Start Time</span>
             <input
               type="time"
-              required
               value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              onChange={(event) => handleStartTimeChange(event.target.value)}
               className={FIELD_CLASSES}
             />
           </label>
@@ -142,13 +191,32 @@ export default function NewItineraryItemPage() {
             <span className={LABEL_CLASSES}>End Time</span>
             <input
               type="time"
-              required
               value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
+              onChange={(event) => handleEndTimeChange(event.target.value)}
               className={FIELD_CLASSES}
             />
           </label>
         </div>
+
+        <label className="block">
+          <span className={LABEL_CLASSES}>Type</span>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="shrink-0 text-muted">
+              <ItineraryTypeIcon type={type} />
+            </span>
+            <select
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+              className={FIELD_CLASSES}
+            >
+              {ITINERARY_ITEM_TYPES.map((itemType) => (
+                <option key={itemType} value={itemType}>
+                  {itemType}
+                </option>
+              ))}
+            </select>
+          </div>
+        </label>
 
         <label className="block">
           <span className={LABEL_CLASSES}>Title</span>
