@@ -9,12 +9,13 @@ import { deleteAllForExperience as deleteAllUpdates } from "@/data/updatesStore"
 import { deleteAllForExperience as deleteNoteForExperience } from "@/data/notesStore";
 import { deleteAllForExperience as deleteAllReflections } from "@/data/reflectionsStore";
 import { deleteAllForExperience as deleteAllBookOrders } from "@/data/bookOrdersStore";
+import { deleteAllForExperience as deleteAllRecommendations } from "@/data/recommendationsStore";
 
 // Single entry point for deleting an Experience: removes the experience
 // record itself plus everything keyed to it across every other store
 // (itinerary, guests, travel details, photos, FAQs, polls, updates,
-// notes, reflections, book orders), so nothing orphaned is left behind.
-// Irreversible.
+// notes, reflections, book orders, recommendations), so nothing orphaned
+// is left behind. Irreversible.
 //
 // experienceId should be the string form (as used everywhere else, e.g.
 // route params) — it's converted to a number only for the experiencesStore
@@ -33,5 +34,6 @@ export async function deleteExperienceCompletely(experienceId) {
   deleteNoteForExperience(experienceId);
   await deleteAllReflections(experienceId);
   deleteAllBookOrders(experienceId);
+  deleteAllRecommendations(experienceId);
   deleteExperience(Number(experienceId));
 }

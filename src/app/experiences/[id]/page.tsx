@@ -46,6 +46,13 @@ import {
   getBookOrders,
   updateBookOrderStatus,
 } from "@/data/bookOrdersStore";
+import {
+  addRecommendation,
+  deleteRecommendation,
+  getRecommendations,
+  RECOMMENDATION_CATEGORIES,
+  updateRecommendation,
+} from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
@@ -208,6 +215,20 @@ type BookOrder = {
   stripeSessionId: string;
   createdAt: string;
 };
+
+type Recommendation = {
+  id: number;
+  experienceId: string;
+  name: string;
+  category: string;
+  description: string;
+  link: string;
+};
+
+const RECOMMENDATION_FIELD_CLASSES =
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
+const RECOMMENDATION_LABEL_CLASSES =
+  "text-sm tracking-wide text-muted uppercase";
 
 // Tighter when a photo is attached, since the response then shares space
 // with the prompt (see the Reflections feed layout below).
@@ -479,6 +500,26 @@ export default function ExperienceDetailPage() {
   const [reflectionOriginalPhoto, setReflectionOriginalPhoto] = useState("");
   const [myReflectionIds, setMyReflectionIds] = useState<number[]>([]);
   const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(
+    []
+  );
+  const [isRecommendationModalOpen, setIsRecommendationModalOpen] =
+    useState(false);
+  const [recommendationName, setRecommendationName] = useState("");
+  const [recommendationCategory, setRecommendationCategory] = useState(
+    RECOMMENDATION_CATEGORIES[0]
+  );
+  const [recommendationDescription, setRecommendationDescription] =
+    useState("");
+  const [recommendationLink, setRecommendationLink] = useState("");
+  const [recommendationError, setRecommendationError] = useState("");
+  const [editingRecommendationId, setEditingRecommendationId] = useState<
+    number | null
+  >(null);
+  const [recommendationEditDraft, setRecommendationEditDraft] = useState<
+    Record<string, string>
+  >({});
+  const [recommendationEditError, setRecommendationEditError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
@@ -551,6 +592,7 @@ export default function ExperienceDetailPage() {
     setReflections(getReflections(params.id));
     setMyReflectionIds(getMyReflectionIds());
     setBookOrders(getBookOrders(params.id));
+    setRecommendations(getRecommendations(params.id));
   }, [params.id]);
 
   function toggleSection(section: string) {
@@ -1299,6 +1341,99 @@ export default function ExperienceDetailPage() {
     setEditingTravelDetailId(null);
     setTravelDetailEditDraft({});
     setTravelDetailEditError("");
+  }
+
+  function handleOpenRecommendationModal() {
+    setRecommendationError("");
+    setIsRecommendationModalOpen(true);
+  }
+
+  function handleCloseRecommendationModal() {
+    setIsRecommendationModalOpen(false);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setRecommendationError("");
+  }
+
+  function handleAddRecommendation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!recommendationName.trim() || !recommendationDescription.trim()) {
+      setRecommendationError("Name and description are required.");
+      return;
+    }
+
+    setRecommendationError("");
+
+    const newRecommendation = addRecommendation({
+      experienceId: params.id,
+      name: recommendationName.trim(),
+      category: recommendationCategory,
+      description: recommendationDescription.trim(),
+      link: recommendationLink.trim(),
+    });
+
+    setRecommendations((current) => [...current, newRecommendation]);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setIsRecommendationModalOpen(false);
+  }
+
+  function handleStartEditRecommendation(entry: Recommendation) {
+    setEditingRecommendationId(entry.id);
+    setRecommendationEditError("");
+    setRecommendationEditDraft({
+      name: entry.name,
+      category: entry.category,
+      description: entry.description,
+      link: entry.link,
+    });
+  }
+
+  function handleRecommendationEditDraftChange(field: string, value: string) {
+    setRecommendationEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditRecommendation() {
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleSaveEditRecommendation(entry: Recommendation) {
+    const draft = recommendationEditDraft;
+
+    if (!draft.name?.trim() || !draft.description?.trim()) {
+      setRecommendationEditError("Name and description are required.");
+      return;
+    }
+
+    const updatedEntry = updateRecommendation(entry.id, {
+      name: draft.name.trim(),
+      category: draft.category,
+      description: draft.description.trim(),
+      link: (draft.link ?? "").trim(),
+    });
+    if (updatedEntry) {
+      setRecommendations((current) =>
+        current.map((item) => (item.id === entry.id ? updatedEntry : item))
+      );
+    }
+
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleDeleteRecommendation(id: number) {
+    if (!window.confirm("Delete this recommendation?")) return;
+
+    deleteRecommendation(id);
+    setRecommendations((current) => current.filter((item) => item.id !== id));
   }
 
   useEffect(() => {
@@ -2910,6 +3045,286 @@ export default function ExperienceDetailPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+        </>
+        )}
+      </div>
+      ) : null}
+
+      {recommendations.length > 0 || !isPreviewingAsGuest ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("recommendations")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.recommendations} />
+            Recommendations
+          </button>
+        </h2>
+
+        {collapsedSections.recommendations ? null : (
+        <>
+        {isPreviewingAsGuest ? null : (
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={handleOpenRecommendationModal}
+            className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          >
+            Add Recommendation
+          </button>
+        </div>
+        )}
+
+        <Modal
+          isOpen={isRecommendationModalOpen}
+          onClose={handleCloseRecommendationModal}
+          title="Add Recommendation"
+        >
+          <form
+            onSubmit={handleAddRecommendation}
+            className="flex flex-col gap-6"
+          >
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>Name</span>
+              <input
+                type="text"
+                required
+                value={recommendationName}
+                onChange={(event) => setRecommendationName(event.target.value)}
+                placeholder="The Pizza Place"
+                className={RECOMMENDATION_FIELD_CLASSES}
+              />
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>Category</span>
+              <select
+                value={recommendationCategory}
+                onChange={(event) =>
+                  setRecommendationCategory(event.target.value)
+                }
+                className={RECOMMENDATION_FIELD_CLASSES}
+              >
+                {RECOMMENDATION_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>
+                Description
+              </span>
+              <textarea
+                required
+                rows={3}
+                value={recommendationDescription}
+                onChange={(event) =>
+                  setRecommendationDescription(event.target.value)
+                }
+                placeholder="Great for groups, ask for the back patio."
+                className={`${RECOMMENDATION_FIELD_CLASSES} resize-none`}
+              />
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>
+                Link (Optional)
+              </span>
+              <input
+                type="url"
+                value={recommendationLink}
+                onChange={(event) => setRecommendationLink(event.target.value)}
+                placeholder="https://..."
+                className={RECOMMENDATION_FIELD_CLASSES}
+              />
+            </label>
+
+            {recommendationError ? (
+              <p className="text-sm text-red-600">{recommendationError}</p>
+            ) : null}
+
+            <button
+              type="submit"
+              className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+            >
+              Add Recommendation
+            </button>
+          </form>
+        </Modal>
+
+        {recommendations.length === 0 ? (
+          <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+            No recommendations yet
+          </div>
+        ) : (
+          <div className="mt-10 flex flex-col gap-6">
+            {[...recommendations]
+              .sort((a, b) => a.category.localeCompare(b.category))
+              .map((entry) => {
+                if (editingRecommendationId === entry.id) {
+                  const draft = recommendationEditDraft;
+                  const field = (key: string) => draft[key] ?? "";
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex flex-col gap-6 border border-foreground/10 p-4"
+                    >
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Name
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          value={field("name")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "name",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Category
+                        </span>
+                        <select
+                          value={field("category")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "category",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        >
+                          {RECOMMENDATION_CATEGORIES.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Description
+                        </span>
+                        <textarea
+                          required
+                          rows={3}
+                          value={field("description")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "description",
+                              event.target.value
+                            )
+                          }
+                          className={`${RECOMMENDATION_FIELD_CLASSES} resize-none`}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Link (Optional)
+                        </span>
+                        <input
+                          type="url"
+                          value={field("link")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "link",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        />
+                      </label>
+
+                      {recommendationEditError ? (
+                        <p className="text-sm text-red-600">
+                          {recommendationEditError}
+                        </p>
+                      ) : null}
+
+                      <div className="flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditRecommendation(entry)}
+                          className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditRecommendation}
+                          className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-6 last:border-b-0"
+                  >
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {entry.name}
+                      </p>
+                      <span className="mt-1 inline-block text-xs tracking-wide text-accent uppercase">
+                        {entry.category}
+                      </span>
+                      <p className="mt-1 text-foreground/70">
+                        {entry.description}
+                      </p>
+                      {entry.link ? (
+                        <a
+                          href={entry.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Visit link
+                        </a>
+                      ) : null}
+                    </div>
+                    {isPreviewingAsGuest ? null : (
+                      <div className="flex shrink-0 items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditRecommendation(entry)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecommendation(entry.id)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         )}
         </>
