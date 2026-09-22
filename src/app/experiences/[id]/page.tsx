@@ -22,6 +22,7 @@ import {
   getVotedPollIds,
   markPollVoted,
   recordVote,
+  setPollOpen,
 } from "@/data/pollsStore";
 import {
   addPhoto,
@@ -97,11 +98,13 @@ const GUEST_TABS: {
     status: "declined",
     emptyMessage: "No declined guests",
   },
-  {
-    label: "Attendee Directory",
-    status: "directory",
-    emptyMessage: "No confirmed attendees yet",
-  },
+  // "Attendee Directory" (status: "directory") is deliberately not a
+  // selectable tab here — nothing currently distinguishes a live RSVP
+  // list from a permanent post-event record, so it was functionally
+  // redundant with "Who's Attending". The "directory" status/rendering
+  // branch itself still exists below (see effectiveGuestTab) — guest
+  // preview mode always shows that view regardless of this tab list,
+  // since a guest is never meant to see the host's live RSVP-status tabs.
 ];
 
 type Experience = {
@@ -158,6 +161,7 @@ type Poll = {
   question: string;
   options: string[];
   votes: Record<string, number>;
+  isOpen: boolean;
 };
 
 const MIN_POLL_OPTIONS = 2;
@@ -666,6 +670,15 @@ export default function ExperienceDetailPage() {
     );
     markPollVoted(pollId);
     setVotedPollIds((current) => [...current, pollId]);
+  }
+
+  function handleTogglePollOpen(pollId: number, nextIsOpen: boolean) {
+    const updatedPoll = setPollOpen(pollId, nextIsOpen);
+    if (!updatedPoll) return;
+
+    setPolls((current) =>
+      current.map((poll) => (poll.id === pollId ? updatedPoll : poll))
+    );
   }
 
   function handleStartTagPhoto(photoId: number) {
@@ -1376,6 +1389,14 @@ export default function ExperienceDetailPage() {
     }
   }
 
+  // Closed polls are hidden entirely from Preview as Guest (not just
+  // marked closed) — a guest should never even know they existed. The
+  // host's own view always sees every poll, open or closed, with a
+  // status indicator instead (see the Polls section below).
+  const visiblePolls = isPreviewingAsGuest
+    ? polls.filter((poll) => poll.isOpen)
+    : polls;
+
   return (
     <>
       {isCreatedToastMounted ? (
@@ -1735,7 +1756,7 @@ export default function ExperienceDetailPage() {
       </div>
       ) : null}
 
-      {polls.length > 0 || !isPreviewingAsGuest ? (
+      {visiblePolls.length > 0 || !isPreviewingAsGuest ? (
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
           <button
@@ -1818,13 +1839,13 @@ export default function ExperienceDetailPage() {
               </form>
             </Modal>
 
-            {polls.length === 0 ? (
+            {visiblePolls.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
                 No polls yet
               </div>
             ) : (
               <div className="mt-10 flex flex-col gap-8">
-                {polls.map((poll) => {
+                {visiblePolls.map((poll) => {
                   const hasVoted = votedPollIds.includes(poll.id);
                   const totalVotes = Object.values(poll.votes).reduce(
                     (sum, count) => sum + count,
@@ -1836,9 +1857,27 @@ export default function ExperienceDetailPage() {
                       key={poll.id}
                       className="border-b border-foreground/10 pb-8 last:border-b-0"
                     >
-                      <p className="font-serif text-lg text-foreground">
-                        {poll.question}
-                      </p>
+                      <div className="flex items-start justify-between gap-4">
+                        <p className="font-serif text-lg text-foreground">
+                          {poll.question}
+                          {!poll.isOpen ? (
+                            <span className="ml-2 inline-block border border-foreground/10 px-2 py-0.5 align-middle text-xs tracking-wide text-muted uppercase">
+                              Closed
+                            </span>
+                          ) : null}
+                        </p>
+                        {isPreviewingAsGuest ? null : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTogglePollOpen(poll.id, !poll.isOpen)
+                            }
+                            className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            {poll.isOpen ? "Close Poll" : "Reopen Poll"}
+                          </button>
+                        )}
+                      </div>
                       <div className="mt-4 flex flex-col gap-3">
                         {poll.options.map((option) => {
                           const count = poll.votes[option] ?? 0;
@@ -1970,7 +2009,7 @@ export default function ExperienceDetailPage() {
         </Modal>
 
         {isPreviewingAsGuest ? null : (
-        <div className="mt-8 flex gap-8 overflow-x-auto border-b border-foreground/10">
+        <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 border-b border-foreground/10">
           {GUEST_TABS.map((tab) => {
             const isActive = tab.status === guestTab;
             const count =

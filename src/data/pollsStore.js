@@ -1,7 +1,11 @@
 const STORAGE_KEY = "yhtbt:polls";
 
 // Poll shape: { id, experienceId, question, options: string[],
-// votes: { [option]: number } }. votes starts at 0 for every option.
+// votes: { [option]: number }, isOpen: boolean }. votes starts at 0 for
+// every option. isOpen defaults to true (open) — a closed poll is hidden
+// entirely from Preview as Guest but still shown, with its status, in the
+// host's own view; that filtering happens where isPreviewingAsGuest is
+// known (/experiences/[id]/page.tsx), not here.
 
 function readFromStorage() {
   if (typeof window === "undefined") return [];
@@ -25,8 +29,19 @@ function getAllPolls() {
   return readFromStorage();
 }
 
+// Entries from before isOpen existed default to open — matches how they
+// always behaved (visible everywhere, no closed state existed yet).
+function normalizePoll(poll) {
+  return {
+    ...poll,
+    isOpen: poll.isOpen ?? true,
+  };
+}
+
 export function getPolls(experienceId) {
-  return getAllPolls().filter((poll) => poll.experienceId === experienceId);
+  return getAllPolls()
+    .filter((poll) => poll.experienceId === experienceId)
+    .map(normalizePoll);
 }
 
 export function addPoll(poll) {
@@ -38,11 +53,25 @@ export function addPoll(poll) {
     votes[option] = 0;
   }
 
-  const newPoll = { id: nextId, ...poll, votes };
+  const newPoll = { id: nextId, isOpen: true, ...poll, votes };
   const updatedPolls = [...polls, newPoll];
 
   writeToStorage(updatedPolls);
   return newPoll;
+}
+
+export function setPollOpen(pollId, isOpen) {
+  const polls = getAllPolls();
+  let updatedPoll = null;
+
+  const updatedPolls = polls.map((poll) => {
+    if (poll.id !== pollId) return poll;
+    updatedPoll = normalizePoll({ ...poll, isOpen });
+    return updatedPoll;
+  });
+
+  writeToStorage(updatedPolls);
+  return updatedPoll;
 }
 
 export function recordVote(pollId, option) {
