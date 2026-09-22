@@ -6,7 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
-import { getItineraryItems } from "@/data/itineraryStore";
+import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import { getNote, saveNote } from "@/data/notesStore";
 import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
@@ -886,6 +886,13 @@ export default function ExperienceDetailPage() {
     if (linkingPhotoId === photoId) {
       setLinkingPhotoId(null);
     }
+  }
+
+  function handleDeleteItineraryItem(itemId: number) {
+    if (!window.confirm("Delete this item?")) return;
+
+    deleteItineraryItem(itemId);
+    setItineraryItems((current) => current.filter((item) => item.id !== itemId));
   }
 
   function handleStartLinkPhoto(photoId: number) {
@@ -1806,12 +1813,21 @@ export default function ExperienceDetailPage() {
                           {item.title}
                         </p>
                         {isPreviewingAsGuest ? null : (
-                        <Link
-                          href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
-                          className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                        >
-                          Edit
-                        </Link>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <Link
+                            href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
+                            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Edit
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItineraryItem(item.id)}
+                            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                          >
+                            Delete
+                          </button>
+                        </div>
                         )}
                       </div>
                       {item.description ? (

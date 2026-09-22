@@ -87,6 +87,12 @@ export function updateItineraryItem(id, fields) {
   return updatedItem;
 }
 
+export function deleteItineraryItem(id) {
+  const items = getAllItineraryItems();
+  const updatedItems = items.filter((item) => item.id !== id);
+  writeToStorage(updatedItems);
+}
+
 // Removes every itinerary item for an experience — used when the
 // experience itself is deleted, so nothing is left orphaned.
 export function deleteAllForExperience(experienceId) {
