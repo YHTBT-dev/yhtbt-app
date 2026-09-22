@@ -250,7 +250,17 @@ body {
 /* Keepsake "Download as PDF" (window.print()) — scoped under
    .keepsake-print (the keepsake page's own wrapper, see
    /experiences/[id]/keepsake/page.tsx) rather than a site-wide print
-   stylesheet, since no other page in the app is meant to be printed yet. */
+   stylesheet, since no other page in the app is meant to be printed yet.
+   @page itself can't be scoped to a class (it applies to the whole
+   paginated output), but this only ever takes effect while printing/
+   exporting a PDF at all, which today only this page's Download as PDF
+   button (and Cmd/Ctrl+P on it) triggers — explicit portrait here so a
+   browser's remembered print settings (e.g. landscape from printing
+   something else earlier) can't carry over and reflow this layout. */
+@page {
+  size: portrait;
+}
+
 @media print {
   .keepsake-print-hide {
     display: none !important;
@@ -301,6 +311,25 @@ body {
   .keepsake-print,
   .keepsake-print * {
     color: #1b1a17 !important;
+  }
+
+  /* Smaller cover image and title on the print/PDF first page — the
+     screen sizes (h-72/h-96, text-4xl/5xl) are generous for a hero
+     moment on a scrolling page, but on a fixed printed page they leave
+     little room for anything else. The itinerary still starts on its own
+     page regardless (see .keepsake-print-page-break above), so this is
+     purely about the first page itself reading less oversized/empty, not
+     about fitting itinerary content onto it. */
+  .keepsake-print-cover {
+    height: 180px !important;
+  }
+
+  .keepsake-print-title-block {
+    margin-top: 1rem !important;
+  }
+
+  .keepsake-print-title {
+    font-size: 1.75rem !important;
   }
 
   /* Reinforces position: fixed (already set via Tailwind's `fixed` class

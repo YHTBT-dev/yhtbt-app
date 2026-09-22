@@ -23,6 +23,115 @@ const BOOK_ORDER_FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 const BOOK_ORDER_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 
+const DEFAULT_BOOK_ORDER_COUNTRY = "United States";
+
+// A US state/province field only makes sense as a fixed dropdown for the
+// US — most other countries don't have a small, fixed, dropdown-friendly
+// list of first-level subdivisions the way the US does, so any other
+// country falls back to a plain "State/Province/Region" text field (see
+// the form below) instead of trying to maintain a full list per country.
+const US_STATES = [
+  { code: "AL", name: "Alabama" },
+  { code: "AK", name: "Alaska" },
+  { code: "AZ", name: "Arizona" },
+  { code: "AR", name: "Arkansas" },
+  { code: "CA", name: "California" },
+  { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" },
+  { code: "DE", name: "Delaware" },
+  { code: "DC", name: "District of Columbia" },
+  { code: "FL", name: "Florida" },
+  { code: "GA", name: "Georgia" },
+  { code: "HI", name: "Hawaii" },
+  { code: "ID", name: "Idaho" },
+  { code: "IL", name: "Illinois" },
+  { code: "IN", name: "Indiana" },
+  { code: "IA", name: "Iowa" },
+  { code: "KS", name: "Kansas" },
+  { code: "KY", name: "Kentucky" },
+  { code: "LA", name: "Louisiana" },
+  { code: "ME", name: "Maine" },
+  { code: "MD", name: "Maryland" },
+  { code: "MA", name: "Massachusetts" },
+  { code: "MI", name: "Michigan" },
+  { code: "MN", name: "Minnesota" },
+  { code: "MS", name: "Mississippi" },
+  { code: "MO", name: "Missouri" },
+  { code: "MT", name: "Montana" },
+  { code: "NE", name: "Nebraska" },
+  { code: "NV", name: "Nevada" },
+  { code: "NH", name: "New Hampshire" },
+  { code: "NJ", name: "New Jersey" },
+  { code: "NM", name: "New Mexico" },
+  { code: "NY", name: "New York" },
+  { code: "NC", name: "North Carolina" },
+  { code: "ND", name: "North Dakota" },
+  { code: "OH", name: "Ohio" },
+  { code: "OK", name: "Oklahoma" },
+  { code: "OR", name: "Oregon" },
+  { code: "PA", name: "Pennsylvania" },
+  { code: "RI", name: "Rhode Island" },
+  { code: "SC", name: "South Carolina" },
+  { code: "SD", name: "South Dakota" },
+  { code: "TN", name: "Tennessee" },
+  { code: "TX", name: "Texas" },
+  { code: "UT", name: "Utah" },
+  { code: "VT", name: "Vermont" },
+  { code: "VA", name: "Virginia" },
+  { code: "WA", name: "Washington" },
+  { code: "WV", name: "West Virginia" },
+  { code: "WI", name: "Wisconsin" },
+  { code: "WY", name: "Wyoming" },
+];
+
+// United States first (the default), then the rest alphabetically —
+// avoids a duplicate "United States" entry inside the alphabetical run.
+const COUNTRIES = [
+  DEFAULT_BOOK_ORDER_COUNTRY,
+  ...[
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola",
+    "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
+    "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus",
+    "Belgium", "Belize", "Benin", "Bhutan", "Bolivia",
+    "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria",
+    "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada",
+    "Cape Verde", "Central African Republic", "Chad", "Chile", "China",
+    "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia",
+    "Cuba", "Cyprus", "Czech Republic", "Democratic Republic of the Congo",
+    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador",
+    "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia",
+    "Eswatini", "Ethiopia", "Fiji", "Finland", "France",
+    "Gabon", "Gambia", "Georgia", "Germany", "Ghana",
+    "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau",
+    "Guyana", "Haiti", "Honduras", "Hungary", "Iceland",
+    "India", "Indonesia", "Iran", "Iraq", "Ireland",
+    "Israel", "Italy", "Ivory Coast", "Jamaica", "Japan",
+    "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kosovo",
+    "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon",
+    "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania",
+    "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives",
+    "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius",
+    "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia",
+    "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia",
+    "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua",
+    "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+    "Oman", "Pakistan", "Palau", "Palestine", "Panama",
+    "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland",
+    "Portugal", "Qatar", "Romania", "Russia", "Rwanda",
+    "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines",
+    "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia",
+    "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore",
+    "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
+    "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan",
+    "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan",
+    "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo",
+    "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan",
+    "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom",
+    "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela",
+    "Vietnam", "Yemen", "Zambia", "Zimbabwe",
+  ].sort(),
+];
+
 type Experience = {
   id: number;
   name: string;
@@ -155,7 +264,7 @@ export default function KeepsakePage() {
   const [city, setCity] = useState("");
   const [addressState, setAddressState] = useState("");
   const [zip, setZip] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(DEFAULT_BOOK_ORDER_COUNTRY);
   const [bookOrderError, setBookOrderError] = useState("");
   const [isSubmittingBookOrder, setIsSubmittingBookOrder] = useState(false);
   const originalDocumentTitleRef = useRef("");
@@ -218,7 +327,7 @@ export default function KeepsakePage() {
     setCity("");
     setAddressState("");
     setZip("");
-    setCountry("");
+    setCountry(DEFAULT_BOOK_ORDER_COUNTRY);
     setBookOrderError("");
   }
 
@@ -319,7 +428,7 @@ export default function KeepsakePage() {
       </button>
 
       {experience.coverImage && !coverImageError ? (
-        <div className="mt-8 h-72 w-full overflow-hidden sm:h-96">
+        <div className="keepsake-print-cover mt-8 h-72 w-full overflow-hidden sm:h-96">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={experience.coverImage}
@@ -330,7 +439,7 @@ export default function KeepsakePage() {
         </div>
       ) : null}
 
-      <div className="mt-12 text-center">
+      <div className="keepsake-print-title-block mt-12 text-center">
         {experience.theme === "midnight-edition" ? (
           // Midnight-Edition-only detail — a small invitation-card flourish
           // Editorial Classic and Coastal Light don't have; see the
@@ -342,7 +451,7 @@ export default function KeepsakePage() {
             </span>
           </div>
         ) : null}
-        <h1 className="font-serif text-4xl text-foreground sm:text-5xl">
+        <h1 className="keepsake-print-title font-serif text-4xl text-foreground sm:text-5xl">
           {experience.theme === "midnight-edition" ? (
             // Optional per the original request: a noticeably larger first
             // letter, reserved for this ceremonial page rather than every
@@ -624,19 +733,57 @@ export default function KeepsakePage() {
             </label>
 
             <label className="block">
-              <span className={BOOK_ORDER_LABEL_CLASSES}>State</span>
-              <input
-                type="text"
+              <span className={BOOK_ORDER_LABEL_CLASSES}>Country</span>
+              <select
                 required
-                value={addressState}
-                onChange={(event) => setAddressState(event.target.value)}
-                placeholder="CA"
+                value={country}
+                onChange={(event) => setCountry(event.target.value)}
                 className={BOOK_ORDER_FIELD_CLASSES}
-              />
+              >
+                {COUNTRIES.map((countryName) => (
+                  <option key={countryName} value={countryName}>
+                    {countryName}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
+            <label className="block">
+              <span className={BOOK_ORDER_LABEL_CLASSES}>
+                {country === DEFAULT_BOOK_ORDER_COUNTRY
+                  ? "State"
+                  : "State/Province/Region"}
+              </span>
+              {country === DEFAULT_BOOK_ORDER_COUNTRY ? (
+                <select
+                  required
+                  value={addressState}
+                  onChange={(event) => setAddressState(event.target.value)}
+                  className={BOOK_ORDER_FIELD_CLASSES}
+                >
+                  <option value="" disabled>
+                    Select a state
+                  </option>
+                  {US_STATES.map((state) => (
+                    <option key={state.code} value={state.code}>
+                      {state.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  required
+                  value={addressState}
+                  onChange={(event) => setAddressState(event.target.value)}
+                  placeholder="Ontario"
+                  className={BOOK_ORDER_FIELD_CLASSES}
+                />
+              )}
+            </label>
+
             <label className="block">
               <span className={BOOK_ORDER_LABEL_CLASSES}>ZIP</span>
               <input
@@ -645,18 +792,6 @@ export default function KeepsakePage() {
                 value={zip}
                 onChange={(event) => setZip(event.target.value)}
                 placeholder="90001"
-                className={BOOK_ORDER_FIELD_CLASSES}
-              />
-            </label>
-
-            <label className="block">
-              <span className={BOOK_ORDER_LABEL_CLASSES}>Country</span>
-              <input
-                type="text"
-                required
-                value={country}
-                onChange={(event) => setCountry(event.target.value)}
-                placeholder="United States"
                 className={BOOK_ORDER_FIELD_CLASSES}
               />
             </label>
