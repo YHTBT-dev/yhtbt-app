@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
 import { getTodayLocalDateString } from "@/lib/format";
 
-type Role = "hosted" | "attended";
+type Tab = "all" | "hosted";
 type View = "grid" | "list";
 
 type Experience = {
@@ -22,9 +22,13 @@ const DELETED_TOAST_VISIBLE_DURATION_MS = 3000;
 const DELETED_TOAST_FADE_DURATION_MS = 500;
 const EXPERIENCES_VIEW_STORAGE_KEY = "yhtbt:experiencesView";
 
-const TABS: { label: string; value: Role }[] = [
+// "Hosted" is conditionally shown (see hasHostedExperiences below) — a
+// browser that's only ever attended things shouldn't see an empty Hosted
+// tab, same content-based visibility pattern already used for FAQs/
+// Polls/Updates within an Experience.
+const ALL_TABS: { label: string; value: Tab }[] = [
+  { label: "All Events", value: "all" },
   { label: "Hosted", value: "hosted" },
-  { label: "Attended", value: "attended" },
 ];
 
 function GridIcon() {
@@ -89,7 +93,7 @@ function formatDateRange(startDate: string, endDate: string) {
 }
 
 export default function ExperiencesPage() {
-  const [activeTab, setActiveTab] = useState<Role>("hosted");
+  const [activeTab, setActiveTab] = useState<Tab>("all");
   const [experiences, setExperiences] = useState<Experience[]>([]);
   // Distinguishes "still fetching from Supabase" from "genuinely no
   // Experiences exist" — without this, the empty state would flash
@@ -168,21 +172,42 @@ export default function ExperiencesPage() {
     };
   }, [deletedExperienceName]);
 
+  // "All Events" is every Experience regardless of role — since it's the
+  // unfiltered array rather than a merge of two role-filtered lists, an
+  // Experience with both roles naturally appears only once.
   const filteredExperiences = useMemo(
     () =>
       experiences
-        .filter((experience) => experience.roles.includes(activeTab))
+        .filter((experience) =>
+          activeTab === "all" ? true : experience.roles.includes(activeTab)
+        )
         .sort(
           (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
         ),
     [experiences, activeTab]
   );
 
+  const hasHostedExperiences = useMemo(
+    () => experiences.some((experience) => experience.roles.includes("hosted")),
+    [experiences]
+  );
+  const visibleTabs = hasHostedExperiences
+    ? ALL_TABS
+    : ALL_TABS.filter((tab) => tab.value !== "hosted");
+
+  // If the Hosted tab disappears while it's active (e.g. the last hosted
+  // Experience was deleted), fall back to "All Events" rather than
+  // leaving an inactive-looking tab bar with a filtered, empty list.
+  useEffect(() => {
+    if (!isLoadingExperiences && activeTab === "hosted" && !hasHostedExperiences) {
+      setActiveTab("all");
+    }
+  }, [isLoadingExperiences, activeTab, hasHostedExperiences]);
+
   // Whichever Experience on the CURRENT tab has the nearest startDate
   // that's today or later — recomputed per tab (via filteredExperiences)
-  // so Hosted and Attended each get their own independent "Up Next" pick,
-  // and null (no badge shown anywhere) when nothing on this tab is
-  // upcoming.
+  // so each tab gets its own independent "Up Next" pick, and null (no
+  // badge shown anywhere) when nothing on this tab is upcoming.
   const upNextExperienceId = useMemo(() => {
     const today = getTodayLocalDateString();
     const upcoming = filteredExperiences.filter(
@@ -273,7 +298,7 @@ export default function ExperiencesPage() {
       </button>
 
       <div className="mt-8 flex gap-8 border-b border-foreground/10">
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = tab.value === activeTab;
           return (
             <button
