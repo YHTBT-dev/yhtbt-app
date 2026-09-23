@@ -539,6 +539,7 @@ export default function ExperienceDetailPage() {
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
+  const [pollError, setPollError] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [photoUploadError, setPhotoUploadError] = useState("");
   const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
@@ -648,9 +649,10 @@ export default function ExperienceDetailPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Experiences, Guests, and Itinerary Items come from Supabase now —
-    // every other store here is still localStorage (synchronous), so
-    // they load immediately below while these resolve separately.
+    // Experiences, Guests, Itinerary Items, Travel Details, Photos, and
+    // Polls come from Supabase now — every other store here is still
+    // localStorage (synchronous), so they load immediately below while
+    // these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -673,10 +675,12 @@ export default function ExperienceDetailPage() {
     setCollapsedSections(loadCollapsedSections(params.id));
     setUpdates(getUpdates(params.id));
     setFaqs(getFaqs(params.id));
-    setPolls(getPolls(params.id));
     setVotedPollIds(getVotedPollIds());
     getPhotos(params.id).then((fetched) => {
       if (!cancelled) setPhotos(fetched);
+    });
+    getPolls(params.id).then((fetched) => {
+      if (!cancelled) setPolls(fetched);
     });
     setReflections(getReflections(params.id));
     setMyReflectionIds(getMyReflectionIds());
@@ -852,9 +856,10 @@ export default function ExperienceDetailPage() {
     setIsPollModalOpen(false);
     setPollQuestion("");
     setPollOptions(["", ""]);
+    setPollError("");
   }
 
-  function handleAddPoll(event: FormEvent<HTMLFormElement>) {
+  async function handleAddPoll(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const trimmedOptions = pollOptions
@@ -862,22 +867,27 @@ export default function ExperienceDetailPage() {
       .filter(Boolean);
     if (trimmedOptions.length < MIN_POLL_OPTIONS) return;
 
-    const newPoll = addPoll({
-      experienceId: params.id,
-      question: pollQuestion,
-      options: trimmedOptions,
-    });
+    try {
+      const newPoll = await addPoll({
+        experienceId: params.id,
+        question: pollQuestion,
+        options: trimmedOptions,
+      });
 
-    setPolls((current) => [...current, newPoll]);
-    setPollQuestion("");
-    setPollOptions(["", ""]);
-    setIsPollModalOpen(false);
+      setPolls((current) => [...current, newPoll]);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      setIsPollModalOpen(false);
+      setPollError("");
+    } catch {
+      setPollError("Could not add this poll. Please try again.");
+    }
   }
 
-  function handleVote(pollId: number, option: string) {
+  async function handleVote(pollId: number, option: string) {
     if (votedPollIds.includes(pollId)) return;
 
-    const updatedPoll = recordVote(pollId, option);
+    const updatedPoll = await recordVote(pollId, option);
     if (!updatedPoll) return;
 
     setPolls((current) =>
@@ -887,8 +897,8 @@ export default function ExperienceDetailPage() {
     setVotedPollIds((current) => [...current, pollId]);
   }
 
-  function handleTogglePollOpen(pollId: number, nextIsOpen: boolean) {
-    const updatedPoll = setPollOpen(pollId, nextIsOpen);
+  async function handleTogglePollOpen(pollId: number, nextIsOpen: boolean) {
+    const updatedPoll = await setPollOpen(pollId, nextIsOpen);
     if (!updatedPoll) return;
 
     setPolls((current) =>
@@ -2363,6 +2373,10 @@ export default function ExperienceDetailPage() {
                     </button>
                   ) : null}
                 </div>
+
+                {pollError ? (
+                  <p className="text-sm text-red-600">{pollError}</p>
+                ) : null}
 
                 <button
                   type="submit"
