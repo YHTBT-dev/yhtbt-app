@@ -12,6 +12,13 @@ type DateRangePickerFieldProps = {
   onChange: (range: DateRange | undefined) => void;
   disabled?: Matcher | Matcher[];
   defaultMonth?: Date;
+  // How many days ahead of the clicked start date the first click's
+  // auto-default end date should land — 0 (default) means "same day",
+  // matching Experience dates' single-day default. Hotel stays pass 1
+  // for a one-night-stay default, still freely overridable by a second,
+  // later click, same "sensible default until overridden" shape either
+  // way.
+  autoSyncDays?: number;
 };
 
 // A compact trigger showing the current selection ("Select your dates"
@@ -25,6 +32,7 @@ export default function DateRangePickerField({
   onChange,
   disabled,
   defaultMonth,
+  autoSyncDays = 0,
 }: DateRangePickerFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,35 +77,45 @@ export default function DateRangePickerField({
     hasClickedSinceOpenRef.current = true;
 
     // BUG FIX: reopening the picker on an already-complete range (e.g.
-    // editing an existing Experience) made only the end date movable —
-    // react-day-picker's own range logic (addToRange) only ever adjusts
-    // `to` once both from and to already exist, treating the range as
-    // "continuing" rather than starting fresh. Forcing the first click
-    // after (re)opening to start a brand-new single-day range at
-    // whatever day was actually clicked — ignoring react-day-picker's
-    // own computed range for that one click — restores the same
-    // first-click-sets-start, second-click-sets-end behavior as a
-    // brand-new, empty picker, regardless of what was pre-selected.
-    const effectiveRange: DateRange | undefined =
+    // editing an existing Experience or hotel stay) made only the end
+    // date movable — react-day-picker's own range logic (addToRange)
+    // only ever adjusts `to` once both from and to already exist,
+    // treating the range as "continuing" rather than starting fresh.
+    // Forcing the first click after (re)opening to start a brand-new
+    // single-day range at whatever day was actually clicked — ignoring
+    // react-day-picker's own computed range for that one click —
+    // restores the same first-click-sets-start, second-click-sets-end
+    // behavior as a brand-new, empty picker, regardless of what was
+    // pre-selected.
+    let effectiveRange: DateRange | undefined =
       isFirstClickSinceOpen && value?.from && value?.to
         ? { from: triggerDate, to: triggerDate }
         : range;
 
+    // Pushes that first click's auto-default end date autoSyncDays days
+    // later than the library's own same-day default, if requested (e.g.
+    // hotel stays defaulting to one night) — same "sensible default,
+    // overridable by a second click" shape either way.
+    if (
+      isFirstClickSinceOpen &&
+      autoSyncDays > 0 &&
+      effectiveRange?.from &&
+      effectiveRange?.to &&
+      effectiveRange.from.toDateString() === effectiveRange.to.toDateString()
+    ) {
+      const to = new Date(effectiveRange.from);
+      to.setDate(to.getDate() + autoSyncDays);
+      effectiveRange = { from: effectiveRange.from, to };
+    }
+
     onChange(effectiveRange);
 
     // Closes automatically once a genuinely complete range is chosen —
-    // but NOT on the first click since opening, even though it's now
-    // (thanks to the override above, or react-day-picker's own default)
-    // already a complete one-day range. Without this, the popover would
-    // vanish after one click, never giving a second click the chance to
-    // extend it into a real multi-day range.
-    const isFreshSingleDayDefault =
-      isFirstClickSinceOpen &&
-      effectiveRange?.from &&
-      effectiveRange?.to &&
-      effectiveRange.from.toDateString() === effectiveRange.to.toDateString();
-
-    if (effectiveRange?.from && effectiveRange?.to && !isFreshSingleDayDefault) {
+    // but NOT on the first click since opening, which is always just an
+    // auto-defaulted starting point (same day, or +autoSyncDays), never
+    // a deliberate final choice. Without this, the popover would vanish
+    // before a second click gets the chance to override that default.
+    if (!isFirstClickSinceOpen && effectiveRange?.from && effectiveRange?.to) {
       setIsOpen(false);
     }
   }

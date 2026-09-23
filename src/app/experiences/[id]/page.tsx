@@ -59,8 +59,10 @@ import {
 import Modal from "@/components/Modal";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
+  addDaysToLocalDateString,
   formatDateHeading,
   formatDateRange,
+  formatLocalDateString,
   formatRelativeTime,
   formatShortDate,
   formatTime,
@@ -72,6 +74,9 @@ import {
 import { compressImageToBlob } from "@/lib/compressImage";
 import { deleteExperiencePhoto, uploadExperiencePhoto } from "@/lib/supabase";
 import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
+import DateRangePickerField, {
+  type DateRange,
+} from "@/components/DateRangePickerField";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -335,17 +340,6 @@ function formatLocationLines(location: string) {
   return [...individualParts, lastLine];
 }
 
-function addOneDay(dateString: string) {
-  const date = parseLocalDate(dateString);
-  if (!date) return dateString;
-
-  date.setDate(date.getDate() + 1);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function combineDateAndTime(dateString: string, timeString: string | undefined) {
   const date = parseLocalDate(dateString);
   if (!date || !timeString) return null;
@@ -494,11 +488,6 @@ export default function ExperienceDetailPage() {
   const [hotelAddress, setHotelAddress] = useState("");
   const [checkInDate, setCheckInDate] = useState("");
   const [checkOutDate, setCheckOutDate] = useState("");
-  // Tracks whether checkOutDate should keep following checkInDate. Stays
-  // true until the user manually sets checkOutDate to something other
-  // than checkInDate, at which point their multi-night stay is respected.
-  const [isCheckOutDateAutoSynced, setIsCheckOutDateAutoSynced] =
-    useState(true);
   const [confirmationNumber, setConfirmationNumber] = useState("");
   // Transport fields
   const [transportDescription, setTransportDescription] = useState("");
@@ -1419,34 +1408,37 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleCheckInDateChange(value: string) {
-    setCheckInDate(value);
+  const hotelDateRange: DateRange | undefined =
+    checkInDate && checkOutDate
+      ? {
+          from: parseLocalDate(checkInDate) ?? undefined,
+          to: parseLocalDate(checkOutDate) ?? undefined,
+        }
+      : undefined;
 
-    if (isCheckOutDateAutoSynced) {
-      const nextCheckOutDate = addOneDay(value);
-      setCheckOutDate(nextCheckOutDate);
-      setTravelDetailError("");
-      return;
-    }
+  // A 7-day buffer on either side of the Experience's own dates — wider
+  // than the itinerary items' 1-day buffer, since an early arrival or
+  // extended stay around the event is normal for a hotel booking, while
+  // still ruling out wildly unrelated dates. Deliberately not tied to
+  // today (unlike Experience dates) — travel logistics are reasonably
+  // logged after the fact.
+  const hotelMinDate = experience
+    ? (parseLocalDate(addDaysToLocalDateString(experience.startDate, -7)) ??
+      undefined)
+    : undefined;
+  const hotelMaxDate = experience
+    ? (parseLocalDate(addDaysToLocalDateString(experience.endDate, 7)) ??
+      undefined)
+    : undefined;
 
-    setTravelDetailError(
-      checkOutDate && checkOutDate < value
-        ? "Check-out date must be on or after the check-in date."
-        : ""
-    );
-  }
-
-  function handleCheckOutDateChange(value: string) {
-    setCheckOutDate(value);
-    // Sync targets checkInDate + 1 day; once the user picks anything
-    // else, respect their manually-chosen stay length going forward.
-    if (value !== addOneDay(checkInDate)) setIsCheckOutDateAutoSynced(false);
-
-    setTravelDetailError(
-      checkInDate && value < checkInDate
-        ? "Check-out date must be on or after the check-in date."
-        : ""
-    );
+  // react-day-picker's own range logic (via DateRangePickerField's
+  // autoSyncDays={1}) already gives the "check-out defaults to one day
+  // after check-in, until a second, later click overrides it" auto-sync
+  // behavior for free — no separate synced-flag state needed, same
+  // simplification already made for Experience dates.
+  function handleHotelDateRangeChange(range: DateRange | undefined) {
+    setCheckInDate(range?.from ? formatLocalDateString(range.from) : "");
+    setCheckOutDate(range?.to ? formatLocalDateString(range.to) : "");
   }
 
   async function handleAddTravelDetail(event: FormEvent<HTMLFormElement>) {
@@ -1463,11 +1455,20 @@ export default function ExperienceDetailPage() {
       }
     }
 
-    if (travelDetailType === "hotel" && checkOutDate < checkInDate) {
-      setTravelDetailError(
-        "Check-out date must be on or after the check-in date."
-      );
-      return;
+    if (travelDetailType === "hotel") {
+      // The native date inputs' `required` attribute used to enforce
+      // this at the browser level; DateRangePickerField has no
+      // equivalent, so it's checked explicitly here instead.
+      if (!checkInDate || !checkOutDate) {
+        setTravelDetailError("Select check-in and check-out dates.");
+        return;
+      }
+      if (checkOutDate < checkInDate) {
+        setTravelDetailError(
+          "Check-out date must be on or after the check-in date."
+        );
+        return;
+      }
     }
 
     setTravelDetailError("");
@@ -1512,7 +1513,6 @@ export default function ExperienceDetailPage() {
         setHotelAddress("");
         setCheckInDate("");
         setCheckOutDate("");
-        setIsCheckOutDateAutoSynced(true);
         setConfirmationNumber("");
       } else {
         newEntry = await addTravelDetail({
@@ -1543,13 +1543,14 @@ export default function ExperienceDetailPage() {
     // travel days reasonably fall a day or so before/after the
     // Experience itself (arrival/departure travel), so this is only a
     // starting point, not a restriction: unlike itinerary item dates,
-    // these fields have no min/max and stay freely adjustable either
-    // direction. Routed through handleCheckInDateChange so check-out
-    // still auto-syncs to check-in + 1 day, same as a manual edit would.
+    // these fields have no min/max (including no past-date guardrail —
+    // travel logistics are reasonably logged after the fact) and stay
+    // freely adjustable either direction.
     if (experience) {
       setDepartureDate(experience.startDate);
       setArrivalDate(experience.startDate);
-      handleCheckInDateChange(experience.startDate);
+      setCheckInDate(experience.startDate);
+      setCheckOutDate(addDaysToLocalDateString(experience.startDate, 1));
     }
     setIsTravelDetailModalOpen(true);
   }
@@ -1569,7 +1570,6 @@ export default function ExperienceDetailPage() {
     setHotelAddress("");
     setCheckInDate("");
     setCheckOutDate("");
-    setIsCheckOutDateAutoSynced(true);
     setConfirmationNumber("");
     setTransportDescription("");
     setPickupLocation("");
@@ -1627,11 +1627,17 @@ export default function ExperienceDetailPage() {
   async function handleSaveEditTravelDetail(entry: TravelDetail) {
     const draft = travelDetailEditDraft;
 
-    if (entry.type === "hotel" && draft.checkOutDate < draft.checkInDate) {
-      setTravelDetailEditError(
-        "Check-out date must be on or after the check-in date."
-      );
-      return;
+    if (entry.type === "hotel") {
+      if (!draft.checkInDate || !draft.checkOutDate) {
+        setTravelDetailEditError("Select check-in and check-out dates.");
+        return;
+      }
+      if (draft.checkOutDate < draft.checkInDate) {
+        setTravelDetailEditError(
+          "Check-out date must be on or after the check-in date."
+        );
+        return;
+      }
     }
 
     if (entry.type === "flight" && draft.departureDate) {
@@ -3046,33 +3052,21 @@ export default function ExperienceDetailPage() {
                 />
               </label>
 
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <label className="block">
-                  <span className={TRAVEL_LABEL_CLASSES}>Check-In Date</span>
-                  <input
-                    type="date"
-                    required
-                    value={checkInDate}
-                    onChange={(event) =>
-                      handleCheckInDateChange(event.target.value)
-                    }
-                    className={TRAVEL_FIELD_CLASSES}
-                  />
-                </label>
-
-                <label className="block">
-                  <span className={TRAVEL_LABEL_CLASSES}>Check-Out Date</span>
-                  <input
-                    type="date"
-                    required
-                    value={checkOutDate}
-                    onChange={(event) =>
-                      handleCheckOutDateChange(event.target.value)
-                    }
-                    className={TRAVEL_FIELD_CLASSES}
-                  />
-                </label>
-              </div>
+              <label className="block">
+                <span className={TRAVEL_LABEL_CLASSES}>
+                  Check-In / Check-Out
+                </span>
+                <DateRangePickerField
+                  value={hotelDateRange}
+                  onChange={handleHotelDateRangeChange}
+                  autoSyncDays={1}
+                  disabled={
+                    hotelMinDate && hotelMaxDate
+                      ? [{ before: hotelMinDate }, { after: hotelMaxDate }]
+                      : undefined
+                  }
+                />
+              </label>
 
               <label className="block">
                 <span className={TRAVEL_LABEL_CLASSES}>
@@ -3390,32 +3384,48 @@ export default function ExperienceDetailPage() {
                                     className={TRAVEL_FIELD_CLASSES}
                                   />
                                 </label>
-                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                                  <label className="block">
-                                    <span className={TRAVEL_LABEL_CLASSES}>
-                                      Check-In Date
-                                    </span>
-                                    <input
-                                      type="date"
-                                      required
-                                      value={field("checkInDate")}
-                                      onChange={onField("checkInDate")}
-                                      className={TRAVEL_FIELD_CLASSES}
-                                    />
-                                  </label>
-                                  <label className="block">
-                                    <span className={TRAVEL_LABEL_CLASSES}>
-                                      Check-Out Date
-                                    </span>
-                                    <input
-                                      type="date"
-                                      required
-                                      value={field("checkOutDate")}
-                                      onChange={onField("checkOutDate")}
-                                      className={TRAVEL_FIELD_CLASSES}
-                                    />
-                                  </label>
-                                </div>
+                                <label className="block">
+                                  <span className={TRAVEL_LABEL_CLASSES}>
+                                    Check-In / Check-Out
+                                  </span>
+                                  <DateRangePickerField
+                                    value={
+                                      field("checkInDate") && field("checkOutDate")
+                                        ? {
+                                            from:
+                                              parseLocalDate(field("checkInDate")) ??
+                                              undefined,
+                                            to:
+                                              parseLocalDate(field("checkOutDate")) ??
+                                              undefined,
+                                          }
+                                        : undefined
+                                    }
+                                    onChange={(range) => {
+                                      handleTravelDetailEditDraftChange(
+                                        "checkInDate",
+                                        range?.from
+                                          ? formatLocalDateString(range.from)
+                                          : ""
+                                      );
+                                      handleTravelDetailEditDraftChange(
+                                        "checkOutDate",
+                                        range?.to
+                                          ? formatLocalDateString(range.to)
+                                          : ""
+                                      );
+                                    }}
+                                    autoSyncDays={1}
+                                    disabled={
+                                      hotelMinDate && hotelMaxDate
+                                        ? [
+                                            { before: hotelMinDate },
+                                            { after: hotelMaxDate },
+                                          ]
+                                        : undefined
+                                    }
+                                  />
+                                </label>
                                 <label className="block">
                                   <span className={TRAVEL_LABEL_CLASSES}>
                                     Confirmation Number (Optional)
