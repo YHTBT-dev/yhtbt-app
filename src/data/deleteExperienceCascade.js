@@ -25,19 +25,19 @@ import { deleteAllForExperience as deleteAllRecommendations } from "@/data/recom
 // photo's file from Supabase Storage, not just the database record, and
 // deleteAllItineraryItems/deleteAllGuests/deleteAllTravelDetails/
 // deleteAllPhotos/deleteAllPolls/deleteAllFaqs/deleteAllUpdates/
-// deleteAllReflections are now real Supabase calls too. For itinerary
-// items/guests/travel details/polls/FAQs/updates/reflections, those
-// tables' experience_id columns are ALSO ON DELETE CASCADE at the
-// database level, so those calls are belt-and-braces cleanup for the
-// rows themselves — deleteAllPolls also still does the useful extra work
-// of pruning the deleted poll ids out of the separate, still-localStorage
-// voted-polls list, which the database cascade can't reach. Photos and
-// Reflections are different: their experience_id is ON DELETE CASCADE
-// too (covers orphaned database rows), but a foreign key cascade can't
-// reach outside the database — deleteAllPhotos/deleteAllReflections
-// actually deleting each Storage file, below, is still the only thing
-// that prevents orphaned files sitting in Storage with no record
-// pointing at them.
+// deleteAllReflections/deleteAllBookOrders are now real Supabase calls
+// too. For itinerary items/guests/travel details/polls/FAQs/updates/
+// reflections/book orders, those tables' experience_id columns are ALSO
+// ON DELETE CASCADE at the database level, so those calls are
+// belt-and-braces cleanup for the rows themselves — deleteAllPolls also
+// still does the useful extra work of pruning the deleted poll ids out
+// of the separate, still-localStorage voted-polls list, which the
+// database cascade can't reach. Photos and Reflections are different:
+// their experience_id is ON DELETE CASCADE too (covers orphaned database
+// rows), but a foreign key cascade can't reach outside the database —
+// deleteAllPhotos/deleteAllReflections actually deleting each Storage
+// file, below, is still the only thing that prevents orphaned files
+// sitting in Storage with no record pointing at them.
 export async function deleteExperienceCompletely(experienceId) {
   await deleteAllItineraryItems(experienceId);
   await deleteAllGuests(experienceId);
@@ -48,7 +48,7 @@ export async function deleteExperienceCompletely(experienceId) {
   await deleteAllUpdates(experienceId);
   deleteNoteForExperience(experienceId);
   await deleteAllReflections(experienceId);
-  deleteAllBookOrders(experienceId);
+  await deleteAllBookOrders(experienceId);
   deleteAllRecommendations(experienceId);
   await deleteExperience(Number(experienceId));
 }

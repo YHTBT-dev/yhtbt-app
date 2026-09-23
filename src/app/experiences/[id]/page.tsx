@@ -652,9 +652,10 @@ export default function ExperienceDetailPage() {
     let cancelled = false;
 
     // Experiences, Guests, Itinerary Items, Travel Details, Photos,
-    // Polls, FAQs, Updates, and Reflections come from Supabase now —
-    // every other store here is still localStorage (synchronous), so
-    // they load immediately below while these resolve separately.
+    // Polls, FAQs, Updates, Reflections, and Book Orders come from
+    // Supabase now — every other store here is still localStorage
+    // (synchronous), so they load immediately below while these resolve
+    // separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -692,7 +693,9 @@ export default function ExperienceDetailPage() {
       if (!cancelled) setReflections(fetched);
     });
     setMyReflectionIds(getMyReflectionIds());
-    setBookOrders(getBookOrders(params.id));
+    getBookOrders(params.id).then((fetched) => {
+      if (!cancelled) setBookOrders(fetched);
+    });
     setRecommendations(getRecommendations(params.id));
 
     return () => {
@@ -1278,8 +1281,8 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleBookOrderStatusChange(id: number, status: string) {
-    const updated = updateBookOrderStatus(id, status);
+  async function handleBookOrderStatusChange(id: number, status: string) {
+    const updated = await updateBookOrderStatus(id, status);
     if (!updated) return;
     setBookOrders((current) =>
       current.map((order) => (order.id === id ? updated : order))

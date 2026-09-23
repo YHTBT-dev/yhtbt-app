@@ -49,9 +49,9 @@ function BookOrderSuccessContent() {
         // for the same session (React Strict Mode dev double-invoke, or a
         // revisit/refresh of this URL). If a session already produced an
         // order, don't create another one.
-        const existing = getBookOrderByStripeSessionId(sessionId!);
+        const existing = await getBookOrderByStripeSessionId(sessionId!);
         if (!existing) {
-          addBookOrder({
+          await addBookOrder({
             experienceId: data.experienceId,
             recipientName: data.recipientName,
             shippingAddress: data.shippingAddress,
