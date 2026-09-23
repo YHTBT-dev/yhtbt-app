@@ -315,6 +315,24 @@ function getMapsUrl(location: string) {
   )}`;
 }
 
+// Splits a comma-separated location into one line per part, except the
+// last two parts (typically city + state/country, e.g. "Tulum, Mexico")
+// which join onto one final line together. A location with 2 or fewer
+// parts (a single phrase, or already just "City, Country") comes out
+// as a single unsplit line — the last-two-joined slice covers the whole
+// string in that case, so no separate threshold check is needed.
+function formatLocationLines(location: string) {
+  const parts = location
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return [];
+
+  const individualParts = parts.slice(0, -2);
+  const lastLine = parts.slice(-2).join(", ");
+  return [...individualParts, lastLine];
+}
+
 function addOneDay(dateString: string) {
   const date = parseLocalDate(dateString);
   if (!date) return dateString;
@@ -379,6 +397,45 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
       }`}
     >
       <path d="M5 7.5l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Small icon-only actions (itinerary items' Edit/Delete) — deliberately
+// lower visual weight than ItineraryTypeIcon's h-4/w-4, since these sit
+// on their own dedicated line now rather than needing to read at a
+// glance alongside the title.
+function EditIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+    >
+      <path d="M13.5 3.5l3 3L7 16l-4 1 1-4 9.5-9.5Z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+    >
+      <path d="M4 6h12" />
+      <path d="M7.5 6V4.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V6" />
+      <path d="M5.5 6l.7 9a1 1 0 0 0 1 1h5.6a1 1 0 0 0 1-1l.7-9" />
+      <path d="M8.5 9v5M11.5 9v5" />
     </svg>
   );
 }
@@ -1821,56 +1878,88 @@ export default function ExperienceDetailPage() {
                     <p className="text-sm text-foreground/60 whitespace-nowrap sm:w-44 sm:shrink-0">
                       {formatTimeRange(item)}
                     </p>
-                    <div>
+                    <div className="min-w-0">
                       {isHappeningNow || isUpNext ? (
                         <span className="mb-1 inline-block border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-widest text-accent uppercase">
                           {isHappeningNow ? "Happening Now" : "Up Next"}
                         </span>
                       ) : null}
-                      <div className="flex items-baseline gap-2">
+                      {/* min-w-0 on the title lets this grid track actually
+                          shrink instead of being held to its text's
+                          min-content width; break-words (overflow-wrap)
+                          then wraps normally at word boundaries within
+                          whatever width it ends up with, only breaking
+                          mid-word as a last resort. items-start (not
+                          items-baseline) keeps the icon pinned to the
+                          title's first line once it wraps, rather than
+                          floating against the whole wrapped block. No
+                          flex-wrap/flex-1 here — those caused the 3-column
+                          layout to collapse in an earlier attempt. */}
+                      <div className="flex items-start gap-2">
                         <span
-                          className="shrink-0 self-center text-muted"
+                          className="shrink-0 text-muted"
                           title={item.type ?? "Generic"}
                         >
                           <ItineraryTypeIcon type={item.type ?? "Generic"} />
                         </span>
-                        <p className="font-serif text-lg text-foreground">
+                        <p className="min-w-0 font-serif text-lg text-foreground break-words">
                           {item.title}
                         </p>
-                        {isPreviewingAsGuest ? null : (
-                        <div className="flex shrink-0 items-center gap-3">
-                          <Link
-                            href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
-                            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                          >
-                            Edit
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItineraryItem(item.id)}
-                            className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        )}
                       </div>
+                      {/* ml-6 = the icon's own width (h-4/w-4 = 1rem)
+                          plus the icon-to-title gap (gap-2 = 0.5rem)
+                          above, so these align with the title text
+                          rather than the icon. */}
                       {item.description ? (
-                        <p className="mt-1 text-sm text-foreground/60">
+                        <p className="mt-1 ml-6 text-sm text-foreground/60">
                           {item.description}
                         </p>
                       ) : null}
                       {item.dressCode ? (
-                        <p className="mt-1 text-sm text-foreground/60">
+                        <p className="mt-1 ml-6 text-sm text-foreground/60">
                           Dress code: {item.dressCode}
                         </p>
                       ) : null}
+                      {isPreviewingAsGuest ? null : (
+                      <div className="mt-2 ml-6 flex items-center gap-3">
+                        <Link
+                          href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
+                          aria-label="Edit"
+                          title="Edit"
+                          className="text-muted transition-colors hover:text-accent"
+                        >
+                          <EditIcon />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteItineraryItem(item.id)}
+                          aria-label="Delete"
+                          title="Delete"
+                          className="text-muted transition-colors hover:text-red-600"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                      )}
                     </div>
                     {item.location ? (
-                      <div className="flex flex-col items-start gap-1 sm:items-end">
-                        <p className="text-sm text-foreground/60 sm:text-right">
-                          {item.location}
-                        </p>
+                      // An explicit bounded width (matching the time
+                      // column's sm:w-44) rather than relying on this
+                      // grid track's own "auto" sizing — a long unbroken
+                      // address previously forced that track to claim its
+                      // full content width, starving the title column
+                      // down to almost nothing. Splitting into short
+                      // stacked lines (see formatLocationLines) keeps
+                      // each line comfortably within this width too.
+                      <div className="flex flex-col items-start gap-1 sm:w-56 sm:shrink-0 sm:items-end">
+                        {formatLocationLines(item.location).map((line, index) => (
+                          <p
+                            key={index}
+                            className="text-sm text-foreground/60 break-words sm:text-right"
+                          >
+                            {line}
+                          </p>
+                        ))}
                         <a
                           href={getMapsUrl(item.location)}
                           target="_blank"
