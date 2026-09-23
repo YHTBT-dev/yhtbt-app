@@ -652,9 +652,9 @@ export default function ExperienceDetailPage() {
     let cancelled = false;
 
     // Experiences, Guests, Itinerary Items, Travel Details, Photos,
-    // Polls, FAQs, and Updates come from Supabase now — every other
-    // store here is still localStorage (synchronous), so they load
-    // immediately below while these resolve separately.
+    // Polls, FAQs, Updates, and Reflections come from Supabase now —
+    // every other store here is still localStorage (synchronous), so
+    // they load immediately below while these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -688,7 +688,9 @@ export default function ExperienceDetailPage() {
     getUpdates(params.id).then((fetched) => {
       if (!cancelled) setUpdates(fetched);
     });
-    setReflections(getReflections(params.id));
+    getReflections(params.id).then((fetched) => {
+      if (!cancelled) setReflections(fetched);
+    });
     setMyReflectionIds(getMyReflectionIds());
     setBookOrders(getBookOrders(params.id));
     setRecommendations(getRecommendations(params.id));
@@ -1111,7 +1113,7 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleSubmitReflection(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitReflection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const isOpenEnded = reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID;
@@ -1145,45 +1147,53 @@ export default function ExperienceDetailPage() {
     setReflectionError("");
 
     if (editingReflectionId) {
-      const updated = updateReflection(editingReflectionId, {
+      const updated = await updateReflection(editingReflectionId, {
         promptId: reflectionPromptId,
         promptText,
         responseText: reflectionResponseText.trim(),
         photo: reflectionPhoto || null,
         taggedGuests: reflectionTaggedGuests,
-      }) as Reflection | null;
+      });
       console.log("[handleSubmitReflection] updated reflection:", updated);
+
+      if (!updated) {
+        setReflectionError("Could not save this reflection. Please try again.");
+        return;
+      }
 
       // The original photo is only safe to delete now — the edit is
       // actually committed, so the record no longer points at it (it was
       // replaced or removed during this edit).
       if (
-        updated &&
         reflectionOriginalPhoto &&
         reflectionOriginalPhoto !== (reflectionPhoto || "")
       ) {
         void deleteExperiencePhoto(reflectionOriginalPhoto);
       }
 
-      if (updated) {
-        setReflections((current) =>
-          current.map((reflection) =>
-            reflection.id === updated.id ? updated : reflection
-          )
-        );
-      }
+      setReflections((current) =>
+        current.map((reflection) =>
+          reflection.id === updated.id ? updated : reflection
+        )
+      );
     } else {
-      const newReflection = addReflection({
-        experienceId: params.id,
-        promptId: reflectionPromptId,
-        promptText,
-        responseText: reflectionResponseText.trim(),
-        photo: reflectionPhoto || null,
-        // Unattributed for now, same as Updates — see the FUTURE note in
-        // reflectionsStore.js.
-        guestName: "",
-        taggedGuests: reflectionTaggedGuests,
-      });
+      let newReflection;
+      try {
+        newReflection = await addReflection({
+          experienceId: params.id,
+          promptId: reflectionPromptId,
+          promptText,
+          responseText: reflectionResponseText.trim(),
+          photo: reflectionPhoto || null,
+          // Unattributed for now, same as Updates — see the FUTURE note in
+          // reflectionsStore.js.
+          guestName: "",
+          taggedGuests: reflectionTaggedGuests,
+        });
+      } catch {
+        setReflectionError("Could not share this reflection. Please try again.");
+        return;
+      }
       console.log("[handleSubmitReflection] saved reflection:", newReflection);
 
       addMyReflectionId(newReflection.id);
@@ -1276,7 +1286,7 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleHideReflection(id: number) {
+  async function handleHideReflection(id: number) {
     if (
       !window.confirm(
         "Delete this reflection? It will no longer be visible to anyone."
@@ -1285,7 +1295,7 @@ export default function ExperienceDetailPage() {
       return;
     }
 
-    hideReflection(id);
+    await hideReflection(id);
     setReflections((current) =>
       current.filter((reflection) => reflection.id !== id)
     );

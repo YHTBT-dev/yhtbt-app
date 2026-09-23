@@ -1,25 +1,21 @@
-import { deleteExperiencePhoto } from "@/lib/supabase";
+import { deleteExperiencePhoto, getSupabaseClient } from "@/lib/supabase";
 
-const STORAGE_KEY = "yhtbt:reflections";
+const TABLE_NAME = "reflections";
 const MY_REFLECTION_IDS_KEY = "myReflectionIds";
 
-// The reflection *record* still lives here in localStorage. photo now
-// holds a real Supabase Storage public URL (uploaded by the caller — see
-// handleReflectionPhotoFileChange in /experiences/[id]/page.tsx — before
-// addReflection() is called), same migration as photosStore.js.
-
-// Entry shape: { id, experienceId, promptId, promptText, responseText,
-// photo, guestName, taggedGuests, createdAt, hidden }. photo is an
-// optional Supabase Storage public URL (null if none). taggedGuests is an
-// array of guest names (may be empty). hidden is a soft-delete flag for
-// host moderation — a hidden entry is excluded from getReflections
-// entirely, but the record (and its photo file) isn't destroyed, so
-// un-hiding it later would still work.
+// Migrated off localStorage onto Supabase — see the "reflections" table (a
+// real experience_id foreign key referencing experiences.id, on delete
+// cascade) and its RLS policies. Every function here is now async. photo
+// still holds a real Supabase Storage public URL (uploaded by the caller
+// — see handleReflectionPhotoFileChange in /experiences/[id]/page.tsx —
+// before addReflection() is called), same as before this migration and
+// the same pattern already used by photosStore.js.
 //
 // guestName is no longer collected on submission (removed from the form,
 // matching how Updates has never asked for one) — new entries are saved
-// with guestName: "". Older entries that already have a name keep
-// displaying it; nothing strips existing data.
+// with guestName: "". Older entries that already had a name are gone now
+// anyway, since this migration starts fresh rather than carrying over old
+// localStorage data.
 //
 // FUTURE: once guest accounts exist, attribute each reflection to the
 // logged-in guest automatically (store userId, display their name from
@@ -53,67 +49,67 @@ export const REFLECTION_PROMPTS = [
 
 export const OPEN_ENDED_REFLECTION_PROMPT_ID = 6;
 
-function readFromStorage() {
-  if (typeof window === "undefined") return [];
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-function writeToStorage(reflections) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(reflections));
-}
-
-function getAllReflections() {
-  return readFromStorage();
-}
-
-// Entries from before taggedGuests/hidden/editedAt existed may not have
-// them. editedAt is null until updateReflection() touches the entry, and
-// stays set thereafter (even through further edits) — the feed only needs
-// to know "has this ever been revised", not track edit history.
-function normalizeReflection(reflection) {
+function rowToReflection(row) {
   return {
-    ...reflection,
-    taggedGuests: reflection.taggedGuests ?? [],
-    hidden: reflection.hidden ?? false,
-    editedAt: reflection.editedAt ?? null,
+    id: row.id,
+    experienceId: String(row.experience_id),
+    promptId: row.prompt_id,
+    promptText: row.prompt_text,
+    responseText: row.response_text,
+    photo: row.photo ?? null,
+    guestName: row.guest_name ?? "",
+    taggedGuests: row.tagged_guests ?? [],
+    createdAt: row.created_at,
+    hidden: row.hidden ?? false,
+    editedAt: row.edited_at ?? null,
   };
 }
 
-// Newest first; hidden entries never appear here, for host or guest.
-export function getReflections(experienceId) {
-  return getAllReflections()
-    .map(normalizeReflection)
-    .filter(
-      (reflection) =>
-        reflection.experienceId === experienceId && !reflection.hidden
-    )
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+function reflectionToRow(reflection) {
+  const row = {};
+  if (reflection.experienceId !== undefined)
+    row.experience_id = Number(reflection.experienceId);
+  if (reflection.promptId !== undefined) row.prompt_id = reflection.promptId;
+  if (reflection.promptText !== undefined) row.prompt_text = reflection.promptText;
+  if (reflection.responseText !== undefined) row.response_text = reflection.responseText;
+  if (reflection.photo !== undefined) row.photo = reflection.photo;
+  if (reflection.guestName !== undefined) row.guest_name = reflection.guestName;
+  if (reflection.taggedGuests !== undefined) row.tagged_guests = reflection.taggedGuests;
+  if (reflection.hidden !== undefined) row.hidden = reflection.hidden;
+  if (reflection.editedAt !== undefined) row.edited_at = reflection.editedAt;
+  return row;
 }
 
-export function addReflection(reflection) {
-  const reflections = getAllReflections();
-  const nextId =
-    reflections.reduce((maxId, existing) => Math.max(maxId, existing.id), 0) +
-    1;
+// Newest first; hidden entries never appear here, for host or guest.
+export async function getReflections(experienceId) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select("*")
+    .eq("experience_id", Number(experienceId))
+    .eq("hidden", false)
+    .order("created_at", { ascending: false });
 
-  const newReflection = normalizeReflection({
-    id: nextId,
-    createdAt: new Date().toISOString(),
-    ...reflection,
-  });
-  const updatedReflections = [...reflections, newReflection];
+  if (error) {
+    console.error("[reflectionsStore] getReflections failed:", error);
+    return [];
+  }
+  return data.map(rowToReflection);
+}
 
-  writeToStorage(updatedReflections);
-  return newReflection;
+export async function addReflection(reflection) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .insert(reflectionToRow(reflection))
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[reflectionsStore] addReflection failed:", error);
+    throw error;
+  }
+  return rowToReflection(data);
 }
 
 // Self-editing (see handleSubmitReflection in /experiences/[id]/page.tsx):
@@ -121,62 +117,73 @@ export function addReflection(reflection) {
 // promptText, responseText, photo, taggedGuests) — id, experienceId, and
 // createdAt are never touched, so an edit revises the entry in place
 // without disturbing when it was originally posted or its ownership.
-export function updateReflection(id, updates) {
-  const reflections = getAllReflections();
-  let updatedReflection = null;
+export async function updateReflection(id, updates) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .update({ ...reflectionToRow(updates), edited_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
 
-  const updatedReflections = reflections.map((reflection) => {
-    if (reflection.id !== id) return reflection;
-    updatedReflection = normalizeReflection({
-      ...reflection,
-      ...updates,
-      editedAt: new Date().toISOString(),
-    });
-    return updatedReflection;
-  });
-
-  writeToStorage(updatedReflections);
-  return updatedReflection;
+  if (error) {
+    console.error("[reflectionsStore] updateReflection failed:", error);
+    return null;
+  }
+  return rowToReflection(data);
 }
 
 // Soft delete for host moderation — sets hidden: true rather than
 // removing the record, so this is reversible later even though there's
 // no "undo" affordance in the UI yet.
-export function hideReflection(id) {
-  const reflections = getAllReflections();
-  let updatedReflection = null;
+export async function hideReflection(id) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .update({ hidden: true })
+    .eq("id", id)
+    .select()
+    .single();
 
-  const updatedReflections = reflections.map((reflection) => {
-    if (reflection.id !== id) return reflection;
-    updatedReflection = normalizeReflection({ ...reflection, hidden: true });
-    return updatedReflection;
-  });
-
-  writeToStorage(updatedReflections);
-  return updatedReflection;
+  if (error) {
+    console.error("[reflectionsStore] hideReflection failed:", error);
+    return null;
+  }
+  return rowToReflection(data);
 }
 
 // Removes every reflection for an experience — used when the experience
 // itself is deleted, so nothing is left orphaned, including each
 // reflection's photo file in Supabase Storage (hideReflection, above,
 // deliberately does NOT do this — soft-deleted reflections stay
-// reversible, photo included).
+// reversible, photo included). The table's own experience_id foreign key
+// is ON DELETE CASCADE for the database ROWS, but that can't reach
+// outside the database — deleting each Storage file first, below, is
+// still the only thing that prevents orphaned files sitting in Storage
+// with no record pointing at them.
 export async function deleteAllForExperience(experienceId) {
-  const reflections = getAllReflections();
-  const reflectionsToDelete = reflections.filter(
-    (reflection) => reflection.experienceId === experienceId
-  );
+  const supabase = getSupabaseClient();
+  const { data: rows, error: selectError } = await supabase
+    .from(TABLE_NAME)
+    .select("photo")
+    .eq("experience_id", Number(experienceId));
 
-  await Promise.all(
-    reflectionsToDelete
-      .filter((reflection) => reflection.photo)
-      .map((reflection) => deleteExperiencePhoto(reflection.photo))
-  );
+  if (selectError) {
+    console.error("[reflectionsStore] deleteAllForExperience lookup failed:", selectError);
+  } else {
+    await Promise.all(
+      rows.filter((row) => row.photo).map((row) => deleteExperiencePhoto(row.photo))
+    );
+  }
 
-  const updatedReflections = reflections.filter(
-    (reflection) => reflection.experienceId !== experienceId
-  );
-  writeToStorage(updatedReflections);
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .delete()
+    .eq("experience_id", Number(experienceId));
+
+  if (error) {
+    console.error("[reflectionsStore] deleteAllForExperience failed:", error);
+  }
 }
 
 // Tracks which reflection ids were submitted from this browser/device, so
@@ -185,7 +192,9 @@ export async function deleteAllForExperience(experienceId) {
 // elsewhere in the app (e.g. votedPollIds), not real authentication. A
 // different browser/device never sees Edit on the same entry, and clearing
 // site data forgets ownership entirely — both accepted trade-offs of this
-// approach.
+// approach. This stays in localStorage untouched by the Supabase
+// migration above, since it's a per-browser flag, not shared reflection
+// data.
 export function getMyReflectionIds() {
   if (typeof window === "undefined") return [];
 
@@ -210,4 +219,15 @@ export function addMyReflectionId(id) {
     MY_REFLECTION_IDS_KEY,
     JSON.stringify([...current, id])
   );
+}
+
+// One-time cleanup: this store no longer reads/writes reflection data in
+// localStorage, so the old "yhtbt:reflections" key is dead data now
+// rather than left lingering indefinitely. Existing local test
+// reflections are deliberately NOT migrated into Supabase — starting
+// fresh, same choice already made for every other migrated store. Note
+// "myReflectionIds" is NOT removed here — that key is still actively
+// used, see above.
+if (typeof window !== "undefined") {
+  window.localStorage.removeItem("yhtbt:reflections");
 }
