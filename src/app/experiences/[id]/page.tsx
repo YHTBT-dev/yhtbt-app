@@ -71,6 +71,7 @@ import {
 } from "@/lib/format";
 import { compressImageToBlob } from "@/lib/compressImage";
 import { deleteExperiencePhoto, uploadExperiencePhoto } from "@/lib/supabase";
+import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
 
 // react-quill-new relies on the browser's `document`, so it can only be
 // loaded on the client.
@@ -127,6 +128,7 @@ type Experience = {
   roles: string[];
   reflectionsEnabled: boolean;
   experienceType?: string;
+  paid: boolean;
 };
 
 type ItineraryItem = {
@@ -598,6 +600,12 @@ export default function ExperienceDetailPage() {
   const [recommendationEditError, setRecommendationEditError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
+  // Shown instead of adding the guest when a free-tier Experience is
+  // already at the guest cap (see handleAddGuest below).
+  const [isGuestCapModalOpen, setIsGuestCapModalOpen] = useState(false);
+  const [isStartingGuestCapCheckout, setIsStartingGuestCapCheckout] =
+    useState(false);
+  const [guestCapError, setGuestCapError] = useState("");
   const [isTravelDetailModalOpen, setIsTravelDetailModalOpen] =
     useState(false);
   const [collapsedSections, setCollapsedSections] = useState<
@@ -1307,6 +1315,20 @@ export default function ExperienceDetailPage() {
   async function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    // Counts every guest regardless of RSVP status — the cap is on list
+    // size, not confirmed attendance. Checked before the email/phone
+    // validation below so a blocked add doesn't first complain about
+    // missing contact info.
+    if (
+      experience &&
+      !experience.paid &&
+      guests.length >= GUEST_COUNT_FREE_TIER_THRESHOLD
+    ) {
+      setIsGuestModalOpen(false);
+      setIsGuestCapModalOpen(true);
+      return;
+    }
+
     if (!guestEmail.trim() && !guestPhone.trim()) {
       setGuestContactError("Enter an email or a phone number.");
       return;
@@ -1338,6 +1360,43 @@ export default function ExperienceDetailPage() {
     setGuestEmail("");
     setGuestPhone("");
     setGuestContactError("");
+  }
+
+  function handleCloseGuestCapModal() {
+    setIsGuestCapModalOpen(false);
+    setGuestCapError("");
+  }
+
+  // Same Checkout flow used for the "more than 20 guests" tier at
+  // Experience creation, but for an Experience that already exists — see
+  // /api/checkout/guest-cap and its success page, which flips paid to
+  // true and sends the host back here. If they cancel, Stripe's own
+  // cancel_url just returns them to this page with nothing changed: no
+  // guest was added and the Experience stays on the free tier at its
+  // current count.
+  async function handleStartGuestCapCheckout() {
+    setGuestCapError("");
+    setIsStartingGuestCapCheckout(true);
+
+    try {
+      const response = await fetch("/api/checkout/guest-cap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experienceId: params.id }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        setGuestCapError(data.error || "Could not start checkout. Please try again.");
+        setIsStartingGuestCapCheckout(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setGuestCapError("Could not start checkout. Please try again.");
+      setIsStartingGuestCapCheckout(false);
+    }
   }
 
   function handleCopyInviteLink() {
@@ -2627,6 +2686,36 @@ export default function ExperienceDetailPage() {
               Add Guest
             </button>
           </form>
+        </Modal>
+
+        <Modal
+          isOpen={isGuestCapModalOpen}
+          onClose={handleCloseGuestCapModal}
+          title="Guest Limit Reached"
+        >
+          <div className="flex flex-col gap-6">
+            <p className="text-sm text-foreground/80">
+              This Experience is on the free tier, which covers up to{" "}
+              {GUEST_COUNT_FREE_TIER_THRESHOLD} guests. You&apos;re already at
+              that limit — upgrading with the platform tier fee removes the
+              cap, so you can add this guest and any more after that.
+            </p>
+
+            {guestCapError ? (
+              <p className="text-sm text-red-600">{guestCapError}</p>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleStartGuestCapCheckout}
+              disabled={isStartingGuestCapCheckout}
+              className="self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isStartingGuestCapCheckout
+                ? "Redirecting to Checkout…"
+                : "Continue to Payment"}
+            </button>
+          </div>
         </Modal>
 
         {isPreviewingAsGuest ? null : (

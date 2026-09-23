@@ -10,6 +10,7 @@ import ThemePicker from "@/components/ThemePicker";
 import DateRangePickerField, {
   type DateRange,
 } from "@/components/DateRangePickerField";
+import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
@@ -23,10 +24,7 @@ const LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 // should upload there instead and store a URL/reference.
 const MAX_COVER_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
-// Experiences at or under this estimated guest count are free — no
-// platform fee, no Stripe Checkout. Above it, the host pays the platform
-// tier fee via Checkout before the experience is created.
-const GUEST_COUNT_FREE_TIER_THRESHOLD = 20;
+type GuestCountTier = "free" | "paid";
 
 export default function NewExperiencePage() {
   const router = useRouter();
@@ -37,7 +35,7 @@ export default function NewExperiencePage() {
   const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
   const [experienceType, setExperienceType] = useState("");
-  const [estimatedGuestCount, setEstimatedGuestCount] = useState("");
+  const [guestCountTier, setGuestCountTier] = useState<GuestCountTier | "">("");
   const [theme, setTheme] = useState("editorial-classic");
   const [isHosting, setIsHosting] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
@@ -127,13 +125,25 @@ export default function NewExperiencePage() {
       return;
     }
 
-    const guestCount = Number(estimatedGuestCount);
-    if (!estimatedGuestCount || !Number.isInteger(guestCount) || guestCount < 1) {
-      setError("Enter a valid estimated guest count.");
+    // The old number input's `required` attribute enforced this at the
+    // browser level; a two-option choice has no native equivalent, so
+    // it's checked explicitly here instead.
+    if (!guestCountTier) {
+      setError("Choose an estimated guest count.");
       return;
     }
 
     setError("");
+
+    // The exact number is no longer collected upfront — just which side
+    // of the free-tier threshold the host expects to land on — but
+    // everything downstream (addExperience, the Checkout API route,
+    // Stripe metadata) still expects a real integer, so this maps the
+    // choice to a representative one on either side of the threshold.
+    const guestCount =
+      guestCountTier === "paid"
+        ? GUEST_COUNT_FREE_TIER_THRESHOLD + 1
+        : GUEST_COUNT_FREE_TIER_THRESHOLD;
 
     const roles = [
       ...(isHosting ? ["hosted"] : []),
@@ -214,11 +224,7 @@ export default function NewExperiencePage() {
     }
   }
 
-  const guestCountValue = Number(estimatedGuestCount);
-  const requiresPayment =
-    estimatedGuestCount !== "" &&
-    Number.isInteger(guestCountValue) &&
-    guestCountValue > GUEST_COUNT_FREE_TIER_THRESHOLD;
+  const requiresPayment = guestCountTier === "paid";
 
   // Whether the form has any actual input worth protecting — used to
   // decide whether leaving needs a confirmation. Role checkboxes and
@@ -232,7 +238,7 @@ export default function NewExperiencePage() {
     endDate !== "" ||
     location.trim() !== "" ||
     experienceType !== "" ||
-    estimatedGuestCount !== "";
+    guestCountTier !== "";
 
   function handleBackClick(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -412,25 +418,45 @@ export default function NewExperiencePage() {
           </label>
         </div>
 
-        <label className="block">
+        <div className="flex flex-col gap-3">
           <span className={LABEL_CLASSES}>Estimated Guest Count</span>
-          <input
-            type="number"
-            required
-            min={1}
-            step={1}
-            value={estimatedGuestCount}
-            onChange={(event) => setEstimatedGuestCount(event.target.value)}
-            placeholder="12"
-            className={FIELD_CLASSES}
-          />
-        </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setGuestCountTier("free")}
+              aria-pressed={guestCountTier === "free"}
+              className={`flex flex-col gap-2 border p-4 text-left transition-colors ${
+                guestCountTier === "free"
+                  ? "border-accent bg-accent/10"
+                  : "border-foreground/10 hover:border-accent/50"
+              }`}
+            >
+              <span className="font-serif text-lg text-foreground">
+                {GUEST_COUNT_FREE_TIER_THRESHOLD} guests or fewer
+              </span>
+              <span className="text-sm text-muted">Free — no payment required.</span>
+            </button>
 
-        <p className="text-sm text-muted italic">
-          {requiresPayment
-            ? `Experiences over ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests require the platform tier fee. You'll be taken to a secure Stripe checkout page (test mode) next.`
-            : `Experiences of ${GUEST_COUNT_FREE_TIER_THRESHOLD} guests or fewer are free — no payment required.`}
-        </p>
+            <button
+              type="button"
+              onClick={() => setGuestCountTier("paid")}
+              aria-pressed={guestCountTier === "paid"}
+              className={`flex flex-col gap-2 border p-4 text-left transition-colors ${
+                guestCountTier === "paid"
+                  ? "border-accent bg-accent/10"
+                  : "border-foreground/10 hover:border-accent/50"
+              }`}
+            >
+              <span className="font-serif text-lg text-foreground">
+                More than {GUEST_COUNT_FREE_TIER_THRESHOLD} guests
+              </span>
+              <span className="text-sm text-muted italic">
+                Requires the platform tier fee. You&apos;ll be taken to a
+                secure Stripe checkout page (test mode) next.
+              </span>
+            </button>
+          </div>
+        </div>
 
         {error ? (
           <p className="text-sm text-red-600">{error}</p>
