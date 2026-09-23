@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
@@ -31,6 +31,7 @@ const DRESS_CODE_OTHER = "Other";
 
 type Experience = {
   id: number;
+  name: string;
   startDate: string;
   endDate: string;
 };
@@ -160,13 +161,34 @@ export default function NewItineraryItemPage() {
     }
   }
 
+  // Whether the form has any actual input worth protecting — used to
+  // decide whether leaving needs a confirmation. date and type aren't
+  // included: they start at meaningful (non-blank) defaults (the
+  // Experience's own startDate, DEFAULT_ITINERARY_ITEM_TYPE) rather than
+  // something a user "entered", so leaving those untouched alone
+  // shouldn't trigger a discard warning.
+  const hasEnteredContent =
+    title.trim() !== "" ||
+    description.trim() !== "" ||
+    location.trim() !== "" ||
+    startTime !== "" ||
+    endTime !== "" ||
+    dressCodeOption !== "";
+
+  function handleBackClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (hasEnteredContent && !window.confirm("Discard changes and go back?")) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
       <Link
-        href="/experiences"
+        href={`/experiences/${params.id}`}
+        onClick={handleBackClick}
         className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
-        &larr; Back to My Experiences
+        &larr; Back to {experience?.name ?? "Experience"}
       </Link>
 
       <h1 className="mt-3 font-serif text-3xl text-foreground sm:text-4xl">
