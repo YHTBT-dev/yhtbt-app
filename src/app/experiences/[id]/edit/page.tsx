@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -200,10 +200,32 @@ export default function EditExperiencePage() {
     );
   }
 
+  // Compared against the originally loaded record — used to decide
+  // whether leaving needs a confirmation. theme isn't included: it's
+  // pre-selected from the existing record via ThemePicker (always some
+  // value, never blank), so it doesn't carry the same "in-progress work"
+  // signal as the other fields below.
+  const hasUnsavedChanges =
+    name !== experience.name ||
+    coverImage !== experience.coverImage ||
+    startDate !== experience.startDate ||
+    endDate !== experience.endDate ||
+    location !== (experience.location ?? "") ||
+    experienceType !== (experience.experienceType ?? "") ||
+    isHosting !== experience.roles.includes("hosted") ||
+    isAttending !== experience.roles.includes("attended");
+
+  function handleBackClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (hasUnsavedChanges && !window.confirm("Discard changes and go back?")) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
       <Link
         href="/experiences"
+        onClick={handleBackClick}
         className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
       >
         &larr; Back to My Experiences

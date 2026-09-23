@@ -1,7 +1,8 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { addExperience, EXPERIENCE_TYPES } from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
 import { getTodayLocalDateString } from "@/lib/format";
@@ -198,9 +199,40 @@ export default function NewExperiencePage() {
     Number.isInteger(guestCountValue) &&
     guestCountValue > GUEST_COUNT_FREE_TIER_THRESHOLD;
 
+  // Whether the form has any actual input worth protecting — used to
+  // decide whether leaving needs a confirmation. Role checkboxes and
+  // theme aren't included: they start at meaningful (non-blank) defaults
+  // rather than something a user "entered", so toggling them alone
+  // shouldn't trigger a discard warning.
+  const hasEnteredContent =
+    name.trim() !== "" ||
+    coverImage !== "" ||
+    startDate !== "" ||
+    endDate !== "" ||
+    location.trim() !== "" ||
+    experienceType !== "" ||
+    estimatedGuestCount !== "";
+
+  function handleBackClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      hasEnteredContent &&
+      !window.confirm("Discard changes and go back?")
+    ) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-8 sm:py-14">
-      <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+      <Link
+        href="/experiences"
+        onClick={handleBackClick}
+        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      >
+        &larr; Back to My Experiences
+      </Link>
+
+      <h1 className="mt-3 font-serif text-3xl text-foreground sm:text-4xl">
         New Experience
       </h1>
 
