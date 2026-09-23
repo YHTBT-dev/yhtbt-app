@@ -63,6 +63,7 @@ function LoginForm() {
         </p>
 
         <form
+          method="post"
           onSubmit={handleSubmit}
           className="mt-10 flex flex-col gap-6 text-left"
         >
