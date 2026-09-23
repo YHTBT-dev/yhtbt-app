@@ -9,17 +9,36 @@ export function parseLocalDate(dateString: string | undefined | null) {
   return new Date(year, month - 1, day);
 }
 
-// Today as a local "YYYY-MM-DD" string (not toISOString(), which is UTC
-// and can land on the wrong day depending on the viewer's timezone offset
-// — the same class of bug parseLocalDate above exists to avoid). Every
-// date field in this app is stored/compared in this same shape, so plain
-// string comparison against this is chronologically correct without
-// re-parsing either side into a Date.
+// The inverse of parseLocalDate — formats a Date using its local
+// year/month/day (not toISOString(), which is UTC and can land on the
+// wrong day depending on the viewer's timezone offset). Used to convert a
+// picked calendar Date (e.g. from DateRangePicker) back into this app's
+// stored "YYYY-MM-DD" string shape.
+export function formatLocalDateString(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+// Today as a local "YYYY-MM-DD" string. Every date field in this app is
+// stored/compared in this same shape, so plain string comparison against
+// this is chronologically correct without re-parsing either side into a
+// Date.
 export function getTodayLocalDateString() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
+  return formatLocalDateString(new Date());
+}
+
+// Adds (or, with a negative value, subtracts) whole days to a
+// "YYYY-MM-DD" string, returning the result in the same shape.
+// setDate() itself correctly handles month/year rollover (e.g. Jan 1
+// minus 1 day becomes Dec 31 of the previous year). Returns the input
+// unchanged if it isn't a valid date string.
+export function addDaysToLocalDateString(dateString: string, days: number) {
+  const date = parseLocalDate(dateString);
+  if (!date) return dateString;
+
+  date.setDate(date.getDate() + days);
+  return formatLocalDateString(date);
 }
 
 export function formatShortDate(dateString: string | undefined) {

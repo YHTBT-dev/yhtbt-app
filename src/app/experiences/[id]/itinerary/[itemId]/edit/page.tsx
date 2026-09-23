@@ -11,6 +11,7 @@ import {
   updateItineraryItem,
 } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import { addDaysToLocalDateString } from "@/lib/format";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
@@ -69,6 +70,16 @@ export default function EditItineraryItemPage() {
   const dressCode =
     dressCodeOption === DRESS_CODE_OTHER ? dressCodeOther : dressCodeOption;
 
+  // A 1-day buffer on either side of the Experience's own dates — lets a
+  // host add an arrival-day or departure-day item just outside the
+  // official dates.
+  const minDate = experience
+    ? addDaysToLocalDateString(experience.startDate, -1)
+    : undefined;
+  const maxDate = experience
+    ? addDaysToLocalDateString(experience.endDate, 1)
+    : undefined;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -118,13 +129,8 @@ export default function EditItineraryItemPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (
-      experience &&
-      (date < experience.startDate || date > experience.endDate)
-    ) {
-      setError(
-        `Date must be between ${experience.startDate} and ${experience.endDate}.`
-      );
+    if (minDate && maxDate && (date < minDate || date > maxDate)) {
+      setError(`Date must be between ${minDate} and ${maxDate}.`);
       return;
     }
 
@@ -200,8 +206,8 @@ export default function EditItineraryItemPage() {
               type="date"
               required
               value={date}
-              min={experience?.startDate}
-              max={experience?.endDate}
+              min={minDate}
+              max={maxDate}
               onChange={(event) => setDate(event.target.value)}
               className={FIELD_CLASSES}
             />

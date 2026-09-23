@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { addExperience, EXPERIENCE_TYPES } from "@/data/experiencesStore";
 import { compressImageFile } from "@/lib/compressImage";
-import { getTodayLocalDateString } from "@/lib/format";
+import { formatLocalDateString, getTodayLocalDateString, parseLocalDate } from "@/lib/format";
 import ThemePicker from "@/components/ThemePicker";
+import DateRangePickerField, {
+  type DateRange,
+} from "@/components/DateRangePickerField";
 
 const FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
@@ -44,19 +47,29 @@ export default function NewExperiencePage() {
   const [coverImageError, setCoverImageError] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Tracks whether endDate should keep following startDate. Stays true
-  // until the user manually sets endDate to something other than
-  // startDate, at which point their multi-day choice is respected.
-  const [isEndDateAutoSynced, setIsEndDateAutoSynced] = useState(true);
 
-  function handleStartDateChange(value: string) {
-    setStartDate(value);
-    if (isEndDateAutoSynced) setEndDate(value);
-  }
+  // parseLocalDate is guaranteed non-null here — getTodayLocalDateString()
+  // never returns an empty string.
+  const todayDate = parseLocalDate(today) as Date;
 
-  function handleEndDateChange(value: string) {
-    setEndDate(value);
-    if (value !== startDate) setIsEndDateAutoSynced(false);
+  const dateRange: DateRange | undefined =
+    startDate && endDate
+      ? {
+          from: parseLocalDate(startDate) ?? undefined,
+          to: parseLocalDate(endDate) ?? undefined,
+        }
+      : undefined;
+
+  // react-day-picker's own range-selection behavior already gives the
+  // "end date defaults to start date" auto-sync for free: clicking a
+  // first day (an empty range) produces a complete one-day range (from
+  // and to both set to that day, since `min` is left at its default of
+  // 0 — see addToRange in react-day-picker), and a second, later click
+  // extends `to`. No separate synced-flag state is needed the way the
+  // old two-separate-inputs version required.
+  function handleDateRangeChange(range: DateRange | undefined) {
+    setStartDate(range?.from ? formatLocalDateString(range.from) : "");
+    setEndDate(range?.to ? formatLocalDateString(range.to) : "");
   }
 
   async function handleCoverImageFileChange(
@@ -98,6 +111,14 @@ export default function NewExperiencePage() {
 
     if (!isHosting && !isAttending) {
       setError("Select at least one: hosting or attending.");
+      return;
+    }
+
+    // The native date inputs' `required` attribute used to enforce this
+    // at the browser level; DateRangePicker has no equivalent, so it's
+    // checked explicitly here instead.
+    if (!startDate || !endDate) {
+      setError("Select your dates.");
       return;
     }
 
@@ -322,31 +343,15 @@ export default function NewExperiencePage() {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
-          <label className="block">
-            <span className={LABEL_CLASSES}>Start Date</span>
-            <input
-              type="date"
-              required
-              min={today}
-              value={startDate}
-              onChange={(event) => handleStartDateChange(event.target.value)}
-              className={FIELD_CLASSES}
-            />
-          </label>
-
-          <label className="block">
-            <span className={LABEL_CLASSES}>End Date</span>
-            <input
-              type="date"
-              required
-              min={today}
-              value={endDate}
-              onChange={(event) => handleEndDateChange(event.target.value)}
-              className={FIELD_CLASSES}
-            />
-          </label>
-        </div>
+        <label className="block">
+          <span className={LABEL_CLASSES}>Dates</span>
+          <DateRangePickerField
+            value={dateRange}
+            onChange={handleDateRangeChange}
+            disabled={{ before: todayDate }}
+            defaultMonth={dateRange?.from ?? todayDate}
+          />
+        </label>
 
         <label className="block">
           <span className={LABEL_CLASSES}>Location</span>
