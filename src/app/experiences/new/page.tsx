@@ -10,6 +10,7 @@ import ThemePicker from "@/components/ThemePicker";
 import DateRangePickerField, {
   type DateRange,
 } from "@/components/DateRangePickerField";
+import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
 
 const FIELD_CLASSES =
@@ -361,11 +362,10 @@ export default function NewExperiencePage() {
 
         <label className="block">
           <span className={LABEL_CLASSES}>Location</span>
-          <input
-            type="text"
+          <LocationAutocompleteInput
             required
             value={location}
-            onChange={(event) => setLocation(event.target.value)}
+            onChange={setLocation}
             placeholder="Los Angeles, CA"
             className={FIELD_CLASSES}
           />

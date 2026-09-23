@@ -10,6 +10,7 @@ import {
   ITINERARY_ITEM_TYPES,
 } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { addDaysToLocalDateString } from "@/lib/format";
 
 const FIELD_CLASSES =
@@ -266,11 +267,10 @@ export default function NewItineraryItemPage() {
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
           <label className="block">
             <span className={LABEL_CLASSES}>Location</span>
-            <input
-              type="text"
+            <LocationAutocompleteInput
               required
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={setLocation}
               placeholder="Los Angeles, CA"
               className={FIELD_CLASSES}
             />
