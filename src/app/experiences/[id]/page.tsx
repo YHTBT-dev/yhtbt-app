@@ -526,6 +526,7 @@ export default function ExperienceDetailPage() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [faqAddError, setFaqAddError] = useState("");
   const [editingFaqId, setEditingFaqId] = useState<number | null>(null);
   const [faqEditDraft, setFaqEditDraft] = useState<Record<string, string>>(
     {}
@@ -649,10 +650,10 @@ export default function ExperienceDetailPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Experiences, Guests, Itinerary Items, Travel Details, Photos, and
-    // Polls come from Supabase now — every other store here is still
-    // localStorage (synchronous), so they load immediately below while
-    // these resolve separately.
+    // Experiences, Guests, Itinerary Items, Travel Details, Photos,
+    // Polls, and FAQs come from Supabase now — every other store here is
+    // still localStorage (synchronous), so they load immediately below
+    // while these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -674,13 +675,15 @@ export default function ExperienceDetailPage() {
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
     setUpdates(getUpdates(params.id));
-    setFaqs(getFaqs(params.id));
     setVotedPollIds(getVotedPollIds());
     getPhotos(params.id).then((fetched) => {
       if (!cancelled) setPhotos(fetched);
     });
     getPolls(params.id).then((fetched) => {
       if (!cancelled) setPolls(fetched);
+    });
+    getFaqs(params.id).then((fetched) => {
+      if (!cancelled) setFaqs(fetched);
     });
     setReflections(getReflections(params.id));
     setMyReflectionIds(getMyReflectionIds());
@@ -739,25 +742,31 @@ export default function ExperienceDetailPage() {
     setUpdateMessage("");
   }
 
-  function handleAddFaq(event: FormEvent<HTMLFormElement>) {
+  async function handleAddFaq(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const newFaq = addFaq({
-      experienceId: params.id,
-      question: faqQuestion,
-      answer: faqAnswer,
-    });
+    try {
+      const newFaq = await addFaq({
+        experienceId: params.id,
+        question: faqQuestion,
+        answer: faqAnswer,
+      });
 
-    setFaqs((current) => [...current, newFaq]);
-    setFaqQuestion("");
-    setFaqAnswer("");
-    setIsFaqModalOpen(false);
+      setFaqs((current) => [...current, newFaq]);
+      setFaqQuestion("");
+      setFaqAnswer("");
+      setIsFaqModalOpen(false);
+      setFaqAddError("");
+    } catch {
+      setFaqAddError("Could not add this FAQ. Please try again.");
+    }
   }
 
   function handleCloseFaqModal() {
     setIsFaqModalOpen(false);
     setFaqQuestion("");
     setFaqAnswer("");
+    setFaqAddError("");
   }
 
   function handleStartEditFaq(faq: Faq) {
@@ -776,7 +785,7 @@ export default function ExperienceDetailPage() {
     setFaqEditError("");
   }
 
-  function handleSaveEditFaq(faq: Faq) {
+  async function handleSaveEditFaq(faq: Faq) {
     const draft = faqEditDraft;
 
     if (!draft.question?.trim()) {
@@ -784,7 +793,7 @@ export default function ExperienceDetailPage() {
       return;
     }
 
-    const updatedFaq = updateFaq(faq.id, {
+    const updatedFaq = await updateFaq(faq.id, {
       question: draft.question.trim(),
       answer: (draft.answer ?? "").trim(),
     });
@@ -792,21 +801,24 @@ export default function ExperienceDetailPage() {
       setFaqs((current) =>
         current.map((item) => (item.id === faq.id ? updatedFaq : item))
       );
+      setEditingFaqId(null);
+      setFaqEditDraft({});
+      setFaqEditError("");
+    } else {
+      setFaqEditError("Could not save this FAQ. Please try again.");
     }
-
-    setEditingFaqId(null);
-    setFaqEditDraft({});
-    setFaqEditError("");
   }
 
   function handleOpenSuggestFaqsModal() {
     setSelectedSuggestedQuestions([]);
+    setFaqAddError("");
     setIsSuggestFaqsModalOpen(true);
   }
 
   function handleCloseSuggestFaqsModal() {
     setIsSuggestFaqsModalOpen(false);
     setSelectedSuggestedQuestions([]);
+    setFaqAddError("");
   }
 
   function handleToggleSuggestedQuestion(question: string) {
@@ -821,19 +833,27 @@ export default function ExperienceDetailPage() {
   // pre-filled, answer left blank — so the host fills in answers (and can
   // still tweak the question wording) the same way they'd edit any other
   // FAQ entry, via the Edit control added to each row below.
-  function handleAddSelectedSuggestedFaqs() {
+  async function handleAddSelectedSuggestedFaqs() {
     if (selectedSuggestedQuestions.length === 0) {
       setIsSuggestFaqsModalOpen(false);
       return;
     }
 
-    const newFaqs = selectedSuggestedQuestions.map((question) =>
-      addFaq({
-        experienceId: params.id,
-        question,
-        answer: "",
-      })
-    );
+    let newFaqs;
+    try {
+      newFaqs = await Promise.all(
+        selectedSuggestedQuestions.map((question) =>
+          addFaq({
+            experienceId: params.id,
+            question,
+            answer: "",
+          })
+        )
+      );
+    } catch {
+      setFaqAddError("Could not add the selected FAQs. Please try again.");
+      return;
+    }
 
     setFaqs((current) => [...current, ...newFaqs]);
     setIsSuggestFaqsModalOpen(false);
@@ -2132,6 +2152,10 @@ export default function ExperienceDetailPage() {
                   />
                 </label>
 
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
+
                 <button
                   type="submit"
                   className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
@@ -2181,6 +2205,10 @@ export default function ExperienceDetailPage() {
                     )
                   )}
                 </div>
+
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
 
                 <button
                   type="button"

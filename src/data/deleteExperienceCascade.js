@@ -24,24 +24,25 @@ import { deleteAllForExperience as deleteAllRecommendations } from "@/data/recom
 // Async because deleteAllPhotos/deleteAllReflections also delete each
 // photo's file from Supabase Storage, not just the database/local
 // record, and deleteAllItineraryItems/deleteAllGuests/
-// deleteAllTravelDetails/deleteAllPhotos/deleteAllPolls are now real
-// Supabase calls too. For itinerary items/guests/travel details/polls,
-// those tables' experience_id columns are ALSO ON DELETE CASCADE at the
-// database level, so those calls are belt-and-braces cleanup for the
-// rows themselves — deleteAllPolls also still does the useful extra work
-// of pruning the deleted poll ids out of the separate, still-localStorage
-// voted-polls list, which the database cascade can't reach. Photos is
-// different: its experience_id is ON DELETE CASCADE too (covers orphaned
-// database rows), but a foreign key cascade can't reach outside the
-// database — deleteAllPhotos actually deleting each Storage file, below,
-// is still the only thing that prevents orphaned files sitting in
-// Storage with no record pointing at them.
+// deleteAllTravelDetails/deleteAllPhotos/deleteAllPolls/deleteAllFaqs are
+// now real Supabase calls too. For itinerary items/guests/travel
+// details/polls/FAQs, those tables' experience_id columns are ALSO ON
+// DELETE CASCADE at the database level, so those calls are
+// belt-and-braces cleanup for the rows themselves — deleteAllPolls also
+// still does the useful extra work of pruning the deleted poll ids out
+// of the separate, still-localStorage voted-polls list, which the
+// database cascade can't reach. Photos is different: its experience_id
+// is ON DELETE CASCADE too (covers orphaned database rows), but a
+// foreign key cascade can't reach outside the database — deleteAllPhotos
+// actually deleting each Storage file, below, is still the only thing
+// that prevents orphaned files sitting in Storage with no record
+// pointing at them.
 export async function deleteExperienceCompletely(experienceId) {
   await deleteAllItineraryItems(experienceId);
   await deleteAllGuests(experienceId);
   await deleteAllTravelDetails(experienceId);
   await deleteAllPhotos(experienceId);
-  deleteAllFaqs(experienceId);
+  await deleteAllFaqs(experienceId);
   await deleteAllPolls(experienceId);
   deleteAllUpdates(experienceId);
   deleteNoteForExperience(experienceId);
