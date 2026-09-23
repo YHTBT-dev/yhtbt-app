@@ -12,6 +12,7 @@ import { getNote, saveNote } from "@/data/notesStore";
 import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
 import {
   addTravelDetail,
+  deleteTravelDetail,
   getTravelDetails,
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
@@ -606,9 +607,11 @@ export default function ExperienceDetailPage() {
     getItineraryItems(params.id).then((fetched) => {
       if (!cancelled) setItineraryItems(fetched);
     });
+    getTravelDetails(params.id).then((fetched) => {
+      if (!cancelled) setTravelDetails(fetched);
+    });
 
     setCoverImageError(false);
-    setTravelDetails(getTravelDetails(params.id));
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
     setUpdates(getUpdates(params.id));
@@ -1277,7 +1280,7 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleAddTravelDetail(event: FormEvent<HTMLFormElement>) {
+  async function handleAddTravelDetail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (travelDetailType === "flight" && departureDate) {
@@ -1300,66 +1303,70 @@ export default function ExperienceDetailPage() {
 
     setTravelDetailError("");
 
-    let newEntry: TravelDetail;
+    try {
+      let newEntry: TravelDetail;
 
-    if (travelDetailType === "flight") {
-      newEntry = addTravelDetail({
-        experienceId: params.id,
-        type: "flight",
-        guestName: flightGuestName,
-        airline,
-        flightNumber,
-        departureAirport,
-        arrivalAirport,
-        departureDate,
-        departureTime,
-        arrivalDate,
-        arrivalTime,
-      });
-      setFlightGuestName("");
-      setAirline("");
-      setFlightNumber("");
-      setDepartureAirport("");
-      setArrivalAirport("");
-      setDepartureDate("");
-      setDepartureTime("");
-      setArrivalDate("");
-      setArrivalTime("");
-    } else if (travelDetailType === "hotel") {
-      newEntry = addTravelDetail({
-        experienceId: params.id,
-        type: "hotel",
-        hotelName,
-        address: hotelAddress,
-        checkInDate,
-        checkOutDate,
-        confirmationNumber,
-      });
-      setHotelName("");
-      setHotelAddress("");
-      setCheckInDate("");
-      setCheckOutDate("");
-      setIsCheckOutDateAutoSynced(true);
-      setConfirmationNumber("");
-    } else {
-      newEntry = addTravelDetail({
-        experienceId: params.id,
-        type: "transport",
-        description: transportDescription,
-        pickupLocation,
-        pickupDate,
-        pickupTime,
-        notes: transportNotes,
-      });
-      setTransportDescription("");
-      setPickupLocation("");
-      setPickupDate("");
-      setPickupTime("");
-      setTransportNotes("");
+      if (travelDetailType === "flight") {
+        newEntry = await addTravelDetail({
+          experienceId: params.id,
+          type: "flight",
+          guestName: flightGuestName,
+          airline,
+          flightNumber,
+          departureAirport,
+          arrivalAirport,
+          departureDate,
+          departureTime,
+          arrivalDate,
+          arrivalTime,
+        });
+        setFlightGuestName("");
+        setAirline("");
+        setFlightNumber("");
+        setDepartureAirport("");
+        setArrivalAirport("");
+        setDepartureDate("");
+        setDepartureTime("");
+        setArrivalDate("");
+        setArrivalTime("");
+      } else if (travelDetailType === "hotel") {
+        newEntry = await addTravelDetail({
+          experienceId: params.id,
+          type: "hotel",
+          hotelName,
+          address: hotelAddress,
+          checkInDate,
+          checkOutDate,
+          confirmationNumber,
+        });
+        setHotelName("");
+        setHotelAddress("");
+        setCheckInDate("");
+        setCheckOutDate("");
+        setIsCheckOutDateAutoSynced(true);
+        setConfirmationNumber("");
+      } else {
+        newEntry = await addTravelDetail({
+          experienceId: params.id,
+          type: "transport",
+          description: transportDescription,
+          pickupLocation,
+          pickupDate,
+          pickupTime,
+          notes: transportNotes,
+        });
+        setTransportDescription("");
+        setPickupLocation("");
+        setPickupDate("");
+        setPickupTime("");
+        setTransportNotes("");
+      }
+
+      setTravelDetails((current) => [...current, newEntry]);
+      setIsTravelDetailModalOpen(false);
+    } catch {
+      setTravelDetailError("Could not save this entry. Please try again.");
     }
-
-    setTravelDetails((current) => [...current, newEntry]);
-    setIsTravelDetailModalOpen(false);
   }
 
   function handleOpenTravelDetailModal() {
@@ -1448,7 +1455,7 @@ export default function ExperienceDetailPage() {
     setTravelDetailEditError("");
   }
 
-  function handleSaveEditTravelDetail(entry: TravelDetail) {
+  async function handleSaveEditTravelDetail(entry: TravelDetail) {
     const draft = travelDetailEditDraft;
 
     if (entry.type === "hotel" && draft.checkOutDate < draft.checkInDate) {
@@ -1467,16 +1474,26 @@ export default function ExperienceDetailPage() {
       }
     }
 
-    const updatedEntry = updateTravelDetail(entry.id, draft);
-    if (updatedEntry) {
-      setTravelDetails((current) =>
-        current.map((item) => (item.id === entry.id ? updatedEntry : item))
-      );
+    const updatedEntry = await updateTravelDetail(entry.id, draft);
+    if (!updatedEntry) {
+      setTravelDetailEditError("Could not save changes. Please try again.");
+      return;
     }
+
+    setTravelDetails((current) =>
+      current.map((item) => (item.id === entry.id ? updatedEntry : item))
+    );
 
     setEditingTravelDetailId(null);
     setTravelDetailEditDraft({});
     setTravelDetailEditError("");
+  }
+
+  async function handleDeleteTravelDetail(id: number) {
+    if (!window.confirm("Delete this travel detail?")) return;
+
+    await deleteTravelDetail(id);
+    setTravelDetails((current) => current.filter((item) => item.id !== id));
   }
 
   function handleOpenRecommendationModal() {
@@ -3278,13 +3295,22 @@ export default function ExperienceDetailPage() {
                               {formatTime(entry.arrivalTime)}
                             </p>
                             {isPreviewingAsGuest ? null : (
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditTravelDetail(entry)}
-                              className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditTravelDetail(entry)}
+                                className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTravelDetail(entry.id)}
+                                className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                              >
+                                Delete
+                              </button>
+                            </div>
                             )}
                           </div>
                         );
@@ -3320,13 +3346,22 @@ export default function ExperienceDetailPage() {
                               </p>
                             </div>
                             {isPreviewingAsGuest ? null : (
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditTravelDetail(entry)}
-                              className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditTravelDetail(entry)}
+                                className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTravelDetail(entry.id)}
+                                className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                              >
+                                Delete
+                              </button>
+                            </div>
                             )}
                           </div>
                         );
@@ -3353,13 +3388,22 @@ export default function ExperienceDetailPage() {
                             ) : null}
                           </div>
                           {isPreviewingAsGuest ? null : (
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditTravelDetail(entry)}
-                            className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditTravelDetail(entry)}
+                              className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTravelDetail(entry.id)}
+                              className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                            >
+                              Delete
+                            </button>
+                          </div>
                           )}
                         </div>
                       );
