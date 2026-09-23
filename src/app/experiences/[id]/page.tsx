@@ -590,9 +590,9 @@ export default function ExperienceDetailPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Experiences and Guests come from Supabase now — every other store
-    // here is still localStorage (synchronous), so they load immediately
-    // below while these resolve separately.
+    // Experiences, Guests, and Itinerary Items come from Supabase now —
+    // every other store here is still localStorage (synchronous), so
+    // they load immediately below while these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -603,9 +603,11 @@ export default function ExperienceDetailPage() {
     getGuests(params.id).then((fetched) => {
       if (!cancelled) setGuests(fetched);
     });
+    getItineraryItems(params.id).then((fetched) => {
+      if (!cancelled) setItineraryItems(fetched);
+    });
 
     setCoverImageError(false);
-    setItineraryItems(getItineraryItems(params.id));
     setTravelDetails(getTravelDetails(params.id));
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
@@ -890,10 +892,10 @@ export default function ExperienceDetailPage() {
     }
   }
 
-  function handleDeleteItineraryItem(itemId: number) {
+  async function handleDeleteItineraryItem(itemId: number) {
     if (!window.confirm("Delete this item?")) return;
 
-    deleteItineraryItem(itemId);
+    await deleteItineraryItem(itemId);
     setItineraryItems((current) => current.filter((item) => item.id !== itemId));
   }
 

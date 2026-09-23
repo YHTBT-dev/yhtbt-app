@@ -282,7 +282,9 @@ export default function KeepsakePage() {
       setExperience(found ?? null);
     });
 
-    setItineraryItems(getItineraryItems(params.id));
+    getItineraryItems(params.id).then((fetched) => {
+      if (!cancelled) setItineraryItems(fetched);
+    });
     getGuests(params.id).then((fetched) => {
       if (!cancelled) setGuests(fetched);
     });

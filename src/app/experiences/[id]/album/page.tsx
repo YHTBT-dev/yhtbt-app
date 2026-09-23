@@ -45,7 +45,9 @@ export default function AlbumPage() {
       setExperience(found ?? null);
     });
 
-    setItineraryItems(getItineraryItems(params.id));
+    getItineraryItems(params.id).then((fetched) => {
+      if (!cancelled) setItineraryItems(fetched);
+    });
     setPhotos(getPhotos(params.id));
 
     return () => {

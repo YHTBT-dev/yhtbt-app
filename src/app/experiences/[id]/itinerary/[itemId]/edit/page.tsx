@@ -80,39 +80,42 @@ export default function EditItineraryItemPage() {
       if (foundExperience) setExperience(foundExperience);
     });
 
-    const items = getItineraryItems(params.id);
-    const foundItem = items.find(
-      (itineraryItem: ItineraryItem) =>
-        String(itineraryItem.id) === params.itemId
-    );
-    setItem(foundItem ?? null);
+    getItineraryItems(params.id).then((items) => {
+      if (cancelled) return;
 
-    if (foundItem) {
-      setDate(foundItem.date);
-      setStartTime(foundItem.startTime);
-      setEndTime(foundItem.endTime);
-      setType(foundItem.type ?? DEFAULT_ITINERARY_ITEM_TYPE);
-      setTitle(foundItem.title);
-      setDescription(foundItem.description);
-      setLocation(foundItem.location);
+      const foundItem = items.find(
+        (itineraryItem: ItineraryItem) =>
+          String(itineraryItem.id) === params.itemId
+      );
+      setItem(foundItem ?? null);
 
-      const existingDressCode = foundItem.dressCode ?? "";
-      if (!existingDressCode) {
-        setDressCodeOption("");
-      } else if (DRESS_CODE_PRESETS.includes(existingDressCode)) {
-        setDressCodeOption(existingDressCode);
-      } else {
-        setDressCodeOption(DRESS_CODE_OTHER);
-        setDressCodeOther(existingDressCode);
+      if (foundItem) {
+        setDate(foundItem.date);
+        setStartTime(foundItem.startTime);
+        setEndTime(foundItem.endTime);
+        setType(foundItem.type ?? DEFAULT_ITINERARY_ITEM_TYPE);
+        setTitle(foundItem.title);
+        setDescription(foundItem.description);
+        setLocation(foundItem.location);
+
+        const existingDressCode = foundItem.dressCode ?? "";
+        if (!existingDressCode) {
+          setDressCodeOption("");
+        } else if (DRESS_CODE_PRESETS.includes(existingDressCode)) {
+          setDressCodeOption(existingDressCode);
+        } else {
+          setDressCodeOption(DRESS_CODE_OTHER);
+          setDressCodeOther(existingDressCode);
+        }
       }
-    }
+    });
 
     return () => {
       cancelled = true;
     };
   }, [params.id, params.itemId]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (
@@ -143,7 +146,7 @@ export default function EditItineraryItemPage() {
 
     setError("");
 
-    updateItineraryItem(Number(params.itemId), {
+    const updated = await updateItineraryItem(Number(params.itemId), {
       date,
       startTime,
       endTime,
@@ -153,6 +156,11 @@ export default function EditItineraryItemPage() {
       dressCode,
       type,
     });
+
+    if (!updated) {
+      setError("Could not save changes. Please try again.");
+      return;
+    }
 
     router.push(`/experiences/${params.id}`);
   }

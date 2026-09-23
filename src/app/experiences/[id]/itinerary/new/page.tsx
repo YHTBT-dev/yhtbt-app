@@ -103,7 +103,7 @@ export default function NewItineraryItemPage() {
     if (value !== addOneHour(startTime)) setIsEndTimeAutoSynced(false);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (
@@ -134,19 +134,23 @@ export default function NewItineraryItemPage() {
 
     setError("");
 
-    addItineraryItem({
-      experienceId: params.id,
-      date,
-      startTime,
-      endTime,
-      title,
-      description,
-      location,
-      dressCode,
-      type,
-    });
+    try {
+      await addItineraryItem({
+        experienceId: params.id,
+        date,
+        startTime,
+        endTime,
+        title,
+        description,
+        location,
+        dressCode,
+        type,
+      });
 
-    router.push(`/experiences/${params.id}`);
+      router.push(`/experiences/${params.id}`);
+    } catch {
+      setError("Could not save this item. Please try again.");
+    }
   }
 
   return (
