@@ -22,10 +22,13 @@ import { deleteAllForExperience as deleteAllRecommendations } from "@/data/recom
 // call, which stores ids numerically.
 //
 // Async because deleteAllPhotos/deleteAllReflections also delete each
-// photo's file from Supabase Storage, not just the local record.
+// photo's file from Supabase Storage, not just the local record, and
+// deleteAllGuests is now a real Supabase call too (guests.experience_id
+// is also ON DELETE CASCADE at the database level — this call is a
+// belt-and-braces cleanup, not the only thing preventing orphaned rows).
 export async function deleteExperienceCompletely(experienceId) {
   deleteAllItineraryItems(experienceId);
-  deleteAllGuests(experienceId);
+  await deleteAllGuests(experienceId);
   deleteAllTravelDetails(experienceId);
   await deleteAllPhotos(experienceId);
   deleteAllFaqs(experienceId);

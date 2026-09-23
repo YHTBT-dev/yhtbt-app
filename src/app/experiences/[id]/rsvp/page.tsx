@@ -32,6 +32,8 @@ export default function RsvpPage() {
     undefined
   );
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [choice, setChoice] = useState<RsvpChoice | null>(null);
   const [error, setError] = useState("");
   const [submittedChoice, setSubmittedChoice] = useState<RsvpChoice | null>(
@@ -55,7 +57,7 @@ export default function RsvpPage() {
     };
   }, [params.id]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!name.trim()) {
@@ -66,10 +68,19 @@ export default function RsvpPage() {
       setError("Let us know whether you'll be attending.");
       return;
     }
+    if (!email.trim() && !phone.trim()) {
+      setError("Enter an email or a phone number.");
+      return;
+    }
 
     setError("");
-    submitRsvp(params.id, name, choice);
-    setSubmittedChoice(choice);
+
+    try {
+      await submitRsvp(params.id, name, choice, email, phone);
+      setSubmittedChoice(choice);
+    } catch {
+      setError("Could not send your RSVP. Please try again.");
+    }
   }
 
   if (experience === undefined) {
@@ -144,6 +155,36 @@ export default function RsvpPage() {
             className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
           />
         </label>
+
+        <label className="block">
+          <span className="text-sm tracking-wide text-muted uppercase">
+            Email
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="jamie@example.com"
+            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm tracking-wide text-muted uppercase">
+            Phone
+          </span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="(555) 123-4567"
+            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+          />
+        </label>
+
+        <p className="text-sm text-muted">
+          Provide an email or a phone number — at least one is required.
+        </p>
 
         <div className="flex flex-col gap-3">
           <span className="text-sm tracking-wide text-muted uppercase">

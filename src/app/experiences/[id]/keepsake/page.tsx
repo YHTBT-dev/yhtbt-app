@@ -283,7 +283,9 @@ export default function KeepsakePage() {
     });
 
     setItineraryItems(getItineraryItems(params.id));
-    setGuests(getGuests(params.id));
+    getGuests(params.id).then((fetched) => {
+      if (!cancelled) setGuests(fetched);
+    });
     setPhotos(getPhotos(params.id));
     setReflections(getReflections(params.id));
     setCoverImageError(false);

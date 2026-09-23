@@ -590,9 +590,9 @@ export default function ExperienceDetailPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Only the Experience record itself comes from Supabase now — every
-    // other store here is still localStorage (synchronous), so they load
-    // immediately below while this resolves separately.
+    // Experiences and Guests come from Supabase now — every other store
+    // here is still localStorage (synchronous), so they load immediately
+    // below while these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -600,10 +600,12 @@ export default function ExperienceDetailPage() {
       );
       setExperience(found ?? null);
     });
+    getGuests(params.id).then((fetched) => {
+      if (!cancelled) setGuests(fetched);
+    });
 
     setCoverImageError(false);
     setItineraryItems(getItineraryItems(params.id));
-    setGuests(getGuests(params.id));
     setTravelDetails(getTravelDetails(params.id));
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
@@ -1187,7 +1189,7 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  function handleAddGuest(event: FormEvent<HTMLFormElement>) {
+  async function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!guestEmail.trim() && !guestPhone.trim()) {
@@ -1196,19 +1198,23 @@ export default function ExperienceDetailPage() {
     }
     setGuestContactError("");
 
-    const newGuest = addGuest({
-      experienceId: params.id,
-      name: guestName,
-      email: guestEmail,
-      phone: guestPhone,
-      rsvpStatus: "invited",
-    });
+    try {
+      const newGuest = await addGuest({
+        experienceId: params.id,
+        name: guestName,
+        email: guestEmail,
+        phone: guestPhone,
+        rsvpStatus: "invited",
+      });
 
-    setGuests((current) => [...current, newGuest]);
-    setGuestName("");
-    setGuestEmail("");
-    setGuestPhone("");
-    setIsGuestModalOpen(false);
+      setGuests((current) => [...current, newGuest]);
+      setGuestName("");
+      setGuestEmail("");
+      setGuestPhone("");
+      setIsGuestModalOpen(false);
+    } catch {
+      setGuestContactError("Could not add this guest. Please try again.");
+    }
   }
 
   function handleCloseGuestModal() {
@@ -1227,11 +1233,11 @@ export default function ExperienceDetailPage() {
     });
   }
 
-  function handleRsvpStatusChange(
+  async function handleRsvpStatusChange(
     guestId: number,
     rsvpStatus: Guest["rsvpStatus"]
   ) {
-    const updatedGuest = updateGuestStatus(guestId, rsvpStatus);
+    const updatedGuest = await updateGuestStatus(guestId, rsvpStatus);
     if (!updatedGuest) return;
 
     setGuests((current) =>
