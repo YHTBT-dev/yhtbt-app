@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "react-quill-new/dist/quill.snow.css";
+@import "react-day-picker/style.css";
 
 /* Theme tokens. Everything a theme can change lives here, scoped under
    [data-theme="<name>"] rather than hardcoded at :root — that's what makes
@@ -270,6 +271,38 @@ body {
 .note-editor .ql-snow.ql-toolbar button:hover .ql-fill,
 .note-editor .ql-snow.ql-toolbar button.ql-active .ql-fill {
   fill: var(--accent);
+}
+
+/* react-day-picker theming (see src/components/DateRangePicker.tsx) —
+   maps the library's own --rdp-* custom properties (its full list is
+   declared on .rdp-root in node_modules/react-day-picker/src/style.css)
+   onto this app's own theme tokens instead of leaving react-day-picker's
+   hardcoded defaults (a literal "blue"), so a DateRangePicker
+   automatically matches whichever theme is active on its nearest
+   [data-theme] ancestor, the same way every other themed element in this
+   file does. --rdp-accent-background-color (the fill behind days in the
+   middle of a selected range) is a light tint of the accent over the
+   theme's own background via color-mix, rather than a fixed color, so it
+   reads correctly on both light and dark themes without a separate
+   per-theme override. */
+.rdp-root {
+  --rdp-accent-color: var(--color-accent);
+  --rdp-accent-background-color: color-mix(
+    in srgb,
+    var(--color-accent) 15%,
+    var(--color-bg)
+  );
+  --rdp-range_start-date-background-color: var(--color-accent);
+  --rdp-range_end-date-background-color: var(--color-accent);
+  --rdp-range_start-color: var(--color-bg);
+  --rdp-range_end-color: var(--color-bg);
+  --rdp-today-color: var(--color-accent);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+.rdp-weekday {
+  color: var(--color-text-secondary);
 }
 
 /* Keepsake "Download as PDF" (window.print()) — scoped under
