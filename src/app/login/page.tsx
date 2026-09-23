@@ -1,15 +1,11 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { FormEvent, useState } from "react";
 
 // TEMPORARY internal-testing gate — see the comment at the top of
 // proxy.ts. Not real authentication; just a shared password so this app
 // isn't wide open while it's being tested pre-launch.
-function LoginForm() {
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/";
-
+export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,11 +38,15 @@ function LoginForm() {
         return;
       }
 
-      console.log("[LoginForm] login succeeded, navigating to:", next);
-      // A full navigation (not router.push) so the browser sends the
-      // just-set cookie along with the next request — proxy.ts checks it
-      // server-side before this route even renders.
-      window.location.href = next;
+      console.log("[LoginForm] login succeeded, navigating to /experiences");
+      // Always /experiences regardless of what page triggered the gate —
+      // landing on whatever in-progress page (e.g. a draft Experience
+      // creation form) the visitor happened to be on/heading to before
+      // hitting the gate was confusing, not helpful. A full navigation
+      // (not router.push) so the browser sends the just-set cookie along
+      // with the next request — proxy.ts checks it server-side before
+      // that route even renders.
+      window.location.href = "/experiences";
     } catch (err) {
       console.log("[LoginForm] submit threw:", err);
       setError("Something went wrong. Try again.");
@@ -96,13 +96,5 @@ function LoginForm() {
         </form>
       </div>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
   );
 }

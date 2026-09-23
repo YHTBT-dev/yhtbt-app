@@ -29,15 +29,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Preserves the originally requested URL (path + query) so /login can
-  // send the visitor on to wherever they were actually headed — including
-  // a deep link like /experiences/[id], not just the homepage — once they
-  // enter the correct password.
+  // Deliberately does NOT preserve the originally requested URL — /login
+  // always sends the visitor to /experiences after a correct password,
+  // regardless of what page triggered the gate (e.g. a deep link to an
+  // in-progress Experience creation form), since landing back on
+  // whatever page they happened to be heading to was confusing rather
+  // than helpful.
   const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set(
-    "next",
-    pathname + request.nextUrl.search
-  );
   return NextResponse.redirect(loginUrl);
 }
 
