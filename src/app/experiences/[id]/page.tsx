@@ -522,6 +522,7 @@ export default function ExperienceDetailPage() {
   const [coverImageError, setCoverImageError] = useState(false);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [updateError, setUpdateError] = useState("");
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
@@ -651,9 +652,9 @@ export default function ExperienceDetailPage() {
     let cancelled = false;
 
     // Experiences, Guests, Itinerary Items, Travel Details, Photos,
-    // Polls, and FAQs come from Supabase now — every other store here is
-    // still localStorage (synchronous), so they load immediately below
-    // while these resolve separately.
+    // Polls, FAQs, and Updates come from Supabase now — every other
+    // store here is still localStorage (synchronous), so they load
+    // immediately below while these resolve separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -674,7 +675,6 @@ export default function ExperienceDetailPage() {
     setCoverImageError(false);
     setNote(getNote(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
-    setUpdates(getUpdates(params.id));
     setVotedPollIds(getVotedPollIds());
     getPhotos(params.id).then((fetched) => {
       if (!cancelled) setPhotos(fetched);
@@ -684,6 +684,9 @@ export default function ExperienceDetailPage() {
     });
     getFaqs(params.id).then((fetched) => {
       if (!cancelled) setFaqs(fetched);
+    });
+    getUpdates(params.id).then((fetched) => {
+      if (!cancelled) setUpdates(fetched);
     });
     setReflections(getReflections(params.id));
     setMyReflectionIds(getMyReflectionIds());
@@ -730,16 +733,21 @@ export default function ExperienceDetailPage() {
     router.push("/experiences");
   }
 
-  function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
+  async function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const newUpdate = addUpdate({
-      experienceId: params.id,
-      message: updateMessage,
-    });
+    try {
+      const newUpdate = await addUpdate({
+        experienceId: params.id,
+        message: updateMessage,
+      });
 
-    setUpdates((current) => [newUpdate, ...current]);
-    setUpdateMessage("");
+      setUpdates((current) => [newUpdate, ...current]);
+      setUpdateMessage("");
+      setUpdateError("");
+    } catch {
+      setUpdateError("Could not post this update. Please try again.");
+    }
   }
 
   async function handleAddFaq(event: FormEvent<HTMLFormElement>) {
@@ -2055,6 +2063,10 @@ export default function ExperienceDetailPage() {
               </button>
             </form>
             )}
+
+            {updateError ? (
+              <p className="mt-2 text-sm text-red-600">{updateError}</p>
+            ) : null}
 
             {updates.length === 0 ? (
               <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
