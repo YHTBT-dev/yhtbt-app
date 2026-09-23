@@ -288,7 +288,9 @@ export default function KeepsakePage() {
     getGuests(params.id).then((fetched) => {
       if (!cancelled) setGuests(fetched);
     });
-    setPhotos(getPhotos(params.id));
+    getPhotos(params.id).then((fetched) => {
+      if (!cancelled) setPhotos(fetched);
+    });
     setReflections(getReflections(params.id));
     setCoverImageError(false);
 

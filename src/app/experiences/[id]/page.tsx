@@ -675,7 +675,9 @@ export default function ExperienceDetailPage() {
     setFaqs(getFaqs(params.id));
     setPolls(getPolls(params.id));
     setVotedPollIds(getVotedPollIds());
-    setPhotos(getPhotos(params.id));
+    getPhotos(params.id).then((fetched) => {
+      if (!cancelled) setPhotos(fetched);
+    });
     setReflections(getReflections(params.id));
     setMyReflectionIds(getMyReflectionIds());
     setBookOrders(getBookOrders(params.id));
@@ -904,7 +906,7 @@ export default function ExperienceDetailPage() {
     setPhotoTagInputValue("");
   }
 
-  function handleAddPhotoTagNow(photoId: number, rawName: string) {
+  async function handleAddPhotoTagNow(photoId: number, rawName: string) {
     const trimmed = rawName.trim();
     if (!trimmed) return;
 
@@ -914,7 +916,7 @@ export default function ExperienceDetailPage() {
       return;
     }
 
-    const updatedPhoto = setPhotoTags(photoId, [...photo.taggedNames, trimmed]);
+    const updatedPhoto = await setPhotoTags(photoId, [...photo.taggedNames, trimmed]);
     if (updatedPhoto) {
       setPhotos((current) =>
         current.map((item) => (item.id === photoId ? updatedPhoto : item))
@@ -923,11 +925,11 @@ export default function ExperienceDetailPage() {
     setPhotoTagInputValue("");
   }
 
-  function handleRemovePhotoTagNow(photoId: number, name: string) {
+  async function handleRemovePhotoTagNow(photoId: number, name: string) {
     const photo = photos.find((item) => item.id === photoId);
     if (!photo) return;
 
-    const updatedPhoto = setPhotoTags(
+    const updatedPhoto = await setPhotoTags(
       photoId,
       photo.taggedNames.filter((tag) => tag !== name)
     );
@@ -967,9 +969,9 @@ export default function ExperienceDetailPage() {
     setLinkingPhotoId(null);
   }
 
-  function handleSelectPhotoItineraryItem(photoId: number, value: string) {
+  async function handleSelectPhotoItineraryItem(photoId: number, value: string) {
     const itineraryItemId = value ? Number(value) : null;
-    const updatedPhoto = setPhotoItineraryItem(photoId, itineraryItemId);
+    const updatedPhoto = await setPhotoItineraryItem(photoId, itineraryItemId);
     if (updatedPhoto) {
       setPhotos((current) =>
         current.map((photo) => (photo.id === photoId ? updatedPhoto : photo))
@@ -999,7 +1001,7 @@ export default function ExperienceDetailPage() {
       }
 
       const dataUrl = await uploadExperiencePhoto(params.id, blob);
-      const newPhoto = addPhoto({
+      const newPhoto = await addPhoto({
         experienceId: params.id,
         dataUrl,
       });

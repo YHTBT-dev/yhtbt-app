@@ -24,12 +24,13 @@ export function getSupabaseClient() {
 
 // Storage bucket for uploaded Experience photos (Photos section and
 // Reflections' attached photos) — see the setup walkthrough for creating
-// this bucket in the Supabase dashboard. Photo/Reflection *records*
-// (tags, prompt text, etc.) still live in localStorage; this bucket only
-// holds the actual image files, with the record storing the resulting
-// public URL. Set to public read so <img src> and downloads work without
-// signed URLs — fine for now since there's no auth/private-Experience
-// concept yet, same as everything else in this app.
+// this bucket in the Supabase dashboard. This bucket only ever holds the
+// actual image files; the record pointing at a file's resulting public
+// URL lives in a database table (photosStore.js's "photos" table;
+// reflectionsStore.js's records are still localStorage, unaffected by
+// that migration). Set to public read so <img src> and downloads work
+// without signed URLs — fine for now since there's no auth/private-
+// Experience concept yet, same as everything else in this app.
 const PHOTOS_BUCKET = "experience-photos";
 
 // Uploads an already-compressed image Blob and returns its public URL.

@@ -48,7 +48,9 @@ export default function AlbumPage() {
     getItineraryItems(params.id).then((fetched) => {
       if (!cancelled) setItineraryItems(fetched);
     });
-    setPhotos(getPhotos(params.id));
+    getPhotos(params.id).then((fetched) => {
+      if (!cancelled) setPhotos(fetched);
+    });
 
     return () => {
       cancelled = true;
