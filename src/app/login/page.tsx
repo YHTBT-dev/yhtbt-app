@@ -15,29 +15,40 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // TEMPORARY diagnostic logging — added to track down a report that
+    // this form does nothing on mobile Safari (no error, no navigation).
+    // Remove once that's confirmed fixed. Open the console on the mobile
+    // device (e.g. via Safari's Web Inspector over USB, or a remote
+    // console tool) to see how far submission actually gets.
+    console.log("[LoginForm] submit event fired");
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
 
     try {
+      console.log("[LoginForm] posting to /api/login...");
       const response = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
+      console.log("[LoginForm] response received, status:", response.status);
       const data = await response.json();
 
       if (!response.ok) {
+        console.log("[LoginForm] login rejected:", data);
         setError(data.error || "Incorrect password.");
         setIsSubmitting(false);
         return;
       }
 
+      console.log("[LoginForm] login succeeded, navigating to:", next);
       // A full navigation (not router.push) so the browser sends the
       // just-set cookie along with the next request — proxy.ts checks it
       // server-side before this route even renders.
       window.location.href = next;
-    } catch {
+    } catch (err) {
+      console.log("[LoginForm] submit threw:", err);
       setError("Something went wrong. Try again.");
       setIsSubmitting(false);
     }
@@ -61,6 +72,9 @@ function LoginForm() {
             </span>
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
+              enterKeyHint="go"
               required
               autoFocus
               value={password}
