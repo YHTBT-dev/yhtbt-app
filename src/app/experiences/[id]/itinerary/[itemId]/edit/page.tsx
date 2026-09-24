@@ -11,6 +11,7 @@ import {
   updateItineraryItem,
 } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import ItineraryDescriptionSuggestions from "@/components/ItineraryDescriptionSuggestions";
 import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { addDaysToLocalDateString } from "@/lib/format";
 
@@ -328,6 +329,11 @@ export default function EditItineraryItemPage() {
 
         <label className="block">
           <span className={LABEL_CLASSES}>Description (Optional)</span>
+          <ItineraryDescriptionSuggestions
+            type={type}
+            description={description}
+            onPick={setDescription}
+          />
           <textarea
             rows={4}
             value={description}
