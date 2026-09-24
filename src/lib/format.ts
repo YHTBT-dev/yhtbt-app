@@ -104,6 +104,13 @@ type TimeRangeItem = {
   time?: string;
 };
 
+// An item whose end time is earlier than its start time on the same date
+// is read as running into the next calendar day (e.g. 11 PM - 2 AM), not
+// as an error. Equal times aren't a wrap (that would be a 24h item).
+export function endsAfterMidnight(item: TimeRangeItem) {
+  return !!item.startTime && !!item.endTime && item.endTime < item.startTime;
+}
+
 export function formatTimeRange(item: TimeRangeItem) {
   if (item.startTime || item.endTime) {
     const start = formatTime(item.startTime);

@@ -226,23 +226,27 @@ export function PolaroidCard<T extends PolaroidReflection>({
         </div>
 
         <div className="polaroid-footer" style={{ padding: "12px 4px 34px" }}>
-          <p
-            className="polaroid-prompt"
-            style={{
-              margin: 0,
-              fontSize: "10px",
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: POLAROID_MUTED,
-            }}
-          >
-            {reflection.promptText}
-          </p>
+          {/* A prompt-free reflection has an empty promptText: no prompt
+              line at all, just the response (and photo). */}
+          {reflection.promptText.trim() ? (
+            <p
+              className="polaroid-prompt"
+              style={{
+                margin: 0,
+                fontSize: "10px",
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: POLAROID_MUTED,
+              }}
+            >
+              {reflection.promptText}
+            </p>
+          ) : null}
           {reflection.photo ? (
             <p
               className="polaroid-caption"
               style={{
-                margin: "4px 0 0",
+                margin: reflection.promptText.trim() ? "4px 0 0" : 0,
                 fontFamily: "var(--font-caveat), cursive",
                 fontWeight: 500,
                 fontSize: "20px",
@@ -347,9 +351,11 @@ export function PolaroidExpandModal({
               className="w-full object-cover"
             />
           ) : null}
-          <p className="text-sm tracking-wide text-muted uppercase">
-            {reflection.promptText}
-          </p>
+          {reflection.promptText.trim() ? (
+            <p className="text-sm tracking-wide text-muted uppercase">
+              {reflection.promptText}
+            </p>
+          ) : null}
           <p className="font-serif text-lg text-foreground break-words">
             {reflection.responseText}
           </p>

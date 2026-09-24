@@ -9,8 +9,14 @@ import { hasCreatedExperience } from "@/lib/creatorName";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import ItineraryTimeRange from "@/components/ItineraryTimeRange";
 import { getNote, saveNote } from "@/data/notesStore";
-import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
+import {
+  addGuest,
+  getGuests,
+  updateGuest,
+  updateGuestStatus,
+} from "@/data/guestsStore";
 import {
   addTravelDetail,
   deleteTravelDetail,
@@ -60,6 +66,7 @@ import {
 } from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
 import RenderErrorBoundary from "@/components/RenderErrorBoundary";
+import RepositionableCover from "@/components/RepositionableCover";
 import ThemePicker from "@/components/ThemePicker";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
@@ -70,7 +77,6 @@ import {
   formatRelativeTime,
   formatShortDate,
   formatTime,
-  formatTimeRange,
   getPhotoDownloadFilename,
   groupByDate,
   parseLocalDate,
@@ -99,6 +105,24 @@ const NOTE_TOOLBAR_MODULES = {
   toolbar: [["bold", "italic"], [{ list: "bullet" }]],
 };
 const NOTE_FORMATS = ["bold", "italic", "list"];
+// "No prompt" is a form-only choice (the reflections table's prompt_id has
+// no slot for it): it's saved as the open-ended id with an EMPTY promptText,
+// which is what distinguishes it from a real open-ended reflection (that
+// one always carries the submitter's own non-empty prompt). See
+// handleSubmitReflection / handleOpenEditReflectionModal for the mapping.
+const NO_PROMPT_REFLECTION_CHOICE_ID = 0;
+
+type PhotoUploadStatus = {
+  key: number;
+  fileName: string;
+  state: "queued" | "uploading" | "done" | "failed";
+  error?: string;
+};
+
+// How many files are compressed/uploaded at once — enough to be quick on a
+// big batch without hammering the phone or the network.
+const PHOTO_UPLOAD_CONCURRENCY = 3;
+
 const RSVP_STATUS_OPTIONS: { label: string; value: Guest["rsvpStatus"] }[] = [
   { label: "Invited", value: "invited" },
   { label: "Confirmed", value: "confirmed" },
@@ -144,6 +168,8 @@ type Experience = {
   roles: string[];
   reflectionsEnabled: boolean;
   showAttendeeCount?: boolean;
+  coverPositionX?: number;
+  coverPositionY?: number;
   experienceType?: string;
   paid: boolean;
 };
@@ -520,7 +546,7 @@ export default function ExperienceDetailPage() {
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestContactError, setGuestContactError] = useState("");
-  const [guestTab, setGuestTab] = useState<GuestTabStatus>("confirmed");
+  const [guestTab, setGuestTab] = useState<GuestTabStatus>("all");
   const [travelDetails, setTravelDetails] = useState<TravelDetail[]>([]);
   const [travelDetailType, setTravelDetailType] =
     useState<TravelDetail["type"]>("flight");
@@ -575,7 +601,8 @@ export default function ExperienceDetailPage() {
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [pollError, setPollError] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
-  const [photoUploadError, setPhotoUploadError] = useState("");
+  // One entry per file in the current/last multi-select upload.
+  const [photoUploads, setPhotoUploads] = useState<PhotoUploadStatus[]>([]);
   const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
   const [photoTagInputValue, setPhotoTagInputValue] = useState("");
   const [linkingPhotoId, setLinkingPhotoId] = useState<number | null>(null);
@@ -660,6 +687,13 @@ export default function ExperienceDetailPage() {
   const [updateMessage, setUpdateMessage] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+  const [guestAddedNotice, setGuestAddedNotice] = useState("");
+  const guestNameInputRef = useRef<HTMLInputElement>(null);
+  const [editingGuestId, setEditingGuestId] = useState<number | null>(null);
+  const [guestEditDraft, setGuestEditDraft] = useState<Record<string, string>>(
+    {}
+  );
+  const [guestEditError, setGuestEditError] = useState("");
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
   // Shown instead of adding the guest when a free-tier Experience is
   // already at the guest cap (see handleAddGuest below).
@@ -1053,36 +1087,82 @@ export default function ExperienceDetailPage() {
 
   async function handlePhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.target;
-    const file = input.files?.[0];
-    if (!file) return;
+    // Copied out before clearing the input, since clearing empties the
+    // live FileList.
+    const files = Array.from(input.files ?? []);
+    input.value = "";
+    if (files.length === 0) return;
 
-    setPhotoUploadError("");
+    const batchStart = Date.now();
+    const batch = files.map((file, index) => ({
+      key: batchStart + index,
+      file,
+    }));
 
-    try {
-      // Compressed first (resized + re-encoded as JPEG) so the size limit
-      // and the actual upload are both against what gets stored, not the
-      // original file — a typical phone photo well over 2MB raw usually
-      // compresses down comfortably under it.
-      const blob = await compressImageToBlob(file);
+    setPhotoUploads(
+      batch.map(({ key, file }) => ({
+        key,
+        fileName: file.name,
+        state: "queued" as const,
+      }))
+    );
 
-      if (blob.size > MAX_PHOTO_SIZE_BYTES) {
-        setPhotoUploadError("Photo is too large even after compression.");
-        input.value = "";
-        return;
-      }
-
-      const dataUrl = await uploadExperiencePhoto(params.id, blob);
-      const newPhoto = await addPhoto({
-        experienceId: params.id,
-        dataUrl,
-      });
-
-      setPhotos((current) => [newPhoto, ...current]);
-      input.value = "";
-    } catch {
-      setPhotoUploadError("Could not upload that photo. Try again.");
-      input.value = "";
+    function updateUpload(key: number, changes: Partial<PhotoUploadStatus>) {
+      setPhotoUploads((current) =>
+        current.map((upload) =>
+          upload.key === key ? { ...upload, ...changes } : upload
+        )
+      );
     }
+
+    // Each file is independent: a failure marks only that file failed and
+    // the rest of the batch carries on.
+    async function uploadOne({ key, file }: (typeof batch)[number]) {
+      updateUpload(key, { state: "uploading" });
+
+      try {
+        // Compressed first (resized + re-encoded as JPEG) so the size limit
+        // and the actual upload are both against what gets stored, not the
+        // original file — a typical phone photo well over 2MB raw usually
+        // compresses down comfortably under it.
+        const blob = await compressImageToBlob(file);
+
+        if (blob.size > MAX_PHOTO_SIZE_BYTES) {
+          updateUpload(key, {
+            state: "failed",
+            error: "Too large even after compression.",
+          });
+          return;
+        }
+
+        const dataUrl = await uploadExperiencePhoto(params.id, blob);
+        const newPhoto = await addPhoto({
+          experienceId: params.id,
+          dataUrl,
+        });
+
+        setPhotos((current) => [newPhoto, ...current]);
+        updateUpload(key, { state: "done" });
+      } catch {
+        updateUpload(key, {
+          state: "failed",
+          error: "Could not upload. Try again.",
+        });
+      }
+    }
+
+    // A small worker pool: PHOTO_UPLOAD_CONCURRENCY runners pull from the
+    // same queue until it's empty.
+    const queue = [...batch];
+    const workers = Array.from(
+      { length: Math.min(PHOTO_UPLOAD_CONCURRENCY, queue.length) },
+      async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          await uploadOne(next);
+        }
+      }
+    );
+    await Promise.all(workers);
   }
 
   async function handleReflectionPhotoFileChange(
@@ -1147,11 +1227,17 @@ export default function ExperienceDetailPage() {
   async function handleSubmitReflection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const isNoPrompt = reflectionPromptId === NO_PROMPT_REFLECTION_CHOICE_ID;
     const isOpenEnded = reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID;
-    const promptText = isOpenEnded
-      ? reflectionCustomPromptText.trim()
-      : (REFLECTION_PROMPTS.find((prompt) => prompt.id === reflectionPromptId)
-          ?.text ?? "");
+    const savedPromptId = isNoPrompt
+      ? OPEN_ENDED_REFLECTION_PROMPT_ID
+      : reflectionPromptId;
+    const promptText = isNoPrompt
+      ? ""
+      : isOpenEnded
+        ? reflectionCustomPromptText.trim()
+        : (REFLECTION_PROMPTS.find((prompt) => prompt.id === reflectionPromptId)
+            ?.text ?? "");
 
     if (isOpenEnded && !promptText) {
       setReflectionError("Write your own prompt.");
@@ -1179,7 +1265,7 @@ export default function ExperienceDetailPage() {
 
     if (editingReflectionId) {
       const updated = await updateReflection(editingReflectionId, {
-        promptId: reflectionPromptId,
+        promptId: savedPromptId,
         promptText,
         responseText: reflectionResponseText.trim(),
         photo: reflectionPhoto || null,
@@ -1212,7 +1298,7 @@ export default function ExperienceDetailPage() {
       try {
         newReflection = await addReflection({
           experienceId: params.id,
-          promptId: reflectionPromptId,
+          promptId: savedPromptId,
           promptText,
           responseText: reflectionResponseText.trim(),
           photo: reflectionPhoto || null,
@@ -1277,7 +1363,12 @@ export default function ExperienceDetailPage() {
 
   function handleOpenEditReflectionModal(reflection: Reflection) {
     setEditingReflectionId(reflection.id);
-    setReflectionPromptId(reflection.promptId);
+    const isPromptFree =
+      reflection.promptId === OPEN_ENDED_REFLECTION_PROMPT_ID &&
+      !reflection.promptText.trim();
+    setReflectionPromptId(
+      isPromptFree ? NO_PROMPT_REFLECTION_CHOICE_ID : reflection.promptId
+    );
     setReflectionCustomPromptText(
       reflection.promptId === OPEN_ENDED_REFLECTION_PROMPT_ID
         ? reflection.promptText
@@ -1487,6 +1578,21 @@ export default function ExperienceDetailPage() {
     }
   }
 
+  async function handleSaveCoverPosition(x: number, y: number) {
+    if (!experience) return false;
+
+    const updated = await updateExperience(experience.id, {
+      coverPositionX: x,
+      coverPositionY: y,
+    });
+    if (!updated) return false;
+
+    setExperience((current) =>
+      current ? { ...current, coverPositionX: x, coverPositionY: y } : current
+    );
+    return true;
+  }
+
   function handleOpenThemeModal() {
     setThemeDraft(experience?.theme ?? "editorial-classic");
     setIsThemeModalOpen(true);
@@ -1540,6 +1646,12 @@ export default function ExperienceDetailPage() {
   async function handleAddGuest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    // Two submit buttons share this form; the one that was pressed says
+    // whether to close the modal after saving or reset it for another.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const keepOpen =
+      submitter instanceof HTMLButtonElement && submitter.value === "addAnother";
+
     // Counts every guest regardless of RSVP status — the cap is on list
     // size, not confirmed attendance. Checked before the email/phone
     // validation below so a blocked add doesn't first complain about
@@ -1573,13 +1685,20 @@ export default function ExperienceDetailPage() {
       setGuestName("");
       setGuestEmail("");
       setGuestPhone("");
-      setIsGuestModalOpen(false);
+      if (keepOpen) {
+        setGuestAddedNotice(`Added ${newGuest.name}.`);
+        guestNameInputRef.current?.focus();
+      } else {
+        setGuestAddedNotice("");
+        setIsGuestModalOpen(false);
+      }
     } catch {
       setGuestContactError("Could not add this guest. Please try again.");
     }
   }
 
   function handleCloseGuestModal() {
+    setGuestAddedNotice("");
     setIsGuestModalOpen(false);
     setGuestName("");
     setGuestEmail("");
@@ -1630,6 +1749,48 @@ export default function ExperienceDetailPage() {
       setIsInviteLinkCopied(true);
       setTimeout(() => setIsInviteLinkCopied(false), 2000);
     });
+  }
+
+  function handleStartEditGuest(guest: Guest) {
+    setEditingGuestId(guest.id);
+    setGuestEditDraft({
+      name: guest.name,
+      email: guest.email,
+      phone: guest.phone,
+    });
+    setGuestEditError("");
+  }
+
+  function handleCancelEditGuest() {
+    setEditingGuestId(null);
+    setGuestEditDraft({});
+    setGuestEditError("");
+  }
+
+  async function handleSaveEditGuest(guest: Guest) {
+    const name = (guestEditDraft.name ?? "").trim();
+    const email = (guestEditDraft.email ?? "").trim();
+    const phone = (guestEditDraft.phone ?? "").trim();
+
+    if (!name) {
+      setGuestEditError("Enter a name.");
+      return;
+    }
+    if (!email && !phone) {
+      setGuestEditError("Enter an email or a phone number.");
+      return;
+    }
+
+    const updated = await updateGuest(guest.id, { name, email, phone });
+    if (!updated) {
+      setGuestEditError("Could not save this guest. Please try again.");
+      return;
+    }
+
+    setGuests((current) =>
+      current.map((item) => (item.id === guest.id ? updated : item))
+    );
+    handleCancelEditGuest();
   }
 
   async function handleRsvpStatusChange(
@@ -1947,6 +2108,8 @@ export default function ExperienceDetailPage() {
       const start = combineDateAndTime(item.date, item.startTime ?? item.time);
       const end = combineDateAndTime(item.date, item.endTime ?? item.time);
       if (!start || !end) continue;
+      // Ends after midnight: the end belongs to the next calendar day.
+      if (end < start) end.setDate(end.getDate() + 1);
       if (now >= start && now <= end) {
         happeningNowItemId = item.id;
         break;
@@ -2020,12 +2183,9 @@ export default function ExperienceDetailPage() {
       recommendations.length > 0 ||
       faqs.length > 0 ||
       visiblePolls.length > 0,
-    // Reflections only count for a guest when they're enabled and visible.
-    photos:
-      !isGuestView ||
-      photos.length > 0 ||
-      (experience.reflectionsEnabled &&
-        reflections.some((reflection) => !reflection.hidden)),
+    // Always visible: anyone, guest or host, can upload here, so it can't
+    // hide when empty or nobody could add the first photo.
+    photos: true,
     // Private to the host, as on the real page — no content check, just
     // host-only.
     notes: !isGuestView,
@@ -2063,22 +2223,21 @@ export default function ExperienceDetailPage() {
         </div>
       ) : null}
 
-      <div className="relative h-64 w-full overflow-hidden sm:h-80">
-        {experience.coverImage && !coverImageError ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={experience.coverImage}
-              alt={experience.name}
-              onError={() => setCoverImageError(true)}
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
-          </>
-        ) : (
+      {experience.coverImage && !coverImageError ? (
+        <RepositionableCover
+          src={experience.coverImage}
+          alt={experience.name}
+          x={experience.coverPositionX ?? 50}
+          y={experience.coverPositionY ?? 50}
+          canEdit={!isGuestView}
+          onSave={handleSaveCoverPosition}
+          onError={() => setCoverImageError(true)}
+        />
+      ) : (
+        <div className="relative h-64 w-full overflow-hidden sm:h-80">
           <div className="h-full w-full bg-gradient-to-br from-accent/15 via-background to-accent/5" />
-        )}
-      </div>
+        </div>
+      )}
 
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
       <div
@@ -2219,7 +2378,7 @@ export default function ExperienceDetailPage() {
                     }`}
                   >
                     <p className="text-sm text-foreground/60 whitespace-nowrap sm:w-44 sm:shrink-0">
-                      {formatTimeRange(item)}
+                      <ItineraryTimeRange {...item} />
                     </p>
                     <div className="min-w-0">
                       {isHappeningNow || isUpNext ? (
@@ -2377,7 +2536,7 @@ export default function ExperienceDetailPage() {
               <span className="text-sm tracking-wide text-muted uppercase">
                 Name
               </span>
-              <input name="guestName" autoComplete="off"
+              <input ref={guestNameInputRef} name="guestName" autoComplete="off"
                 type="text"
                 required
                 value={guestName}
@@ -2421,12 +2580,26 @@ export default function ExperienceDetailPage() {
               <p className="text-sm text-red-600">{guestContactError}</p>
             ) : null}
 
-            <button
-              type="submit"
-              className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-            >
-              Add Guest
-            </button>
+            {guestAddedNotice ? (
+              <p className="text-sm text-accent">{guestAddedNotice}</p>
+            ) : null}
+
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <button
+                type="submit"
+                value="add"
+                className="border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add Guest
+              </button>
+              <button
+                type="submit"
+                value="addAnother"
+                className="border border-accent/40 px-6 py-3 text-sm tracking-wide text-muted uppercase transition-colors hover:border-accent hover:text-accent"
+              >
+                Add Guest &amp; Add Another
+              </button>
+            </div>
           </form>
         </Modal>
 
@@ -2540,38 +2713,168 @@ export default function ExperienceDetailPage() {
               ? guests
               : guests.filter((guest) => guest.rsvpStatus === guestTab);
 
-          return tabGuests.length === 0 ? (
+          // All Guests groups by RSVP: Confirmed first, Declined last,
+          // Invited between (sort is stable, so order within a group is
+          // unchanged).
+          const RSVP_SORT_ORDER = { confirmed: 0, invited: 1, declined: 2 };
+          const displayedGuests =
+            guestTab === "all"
+              ? [...tabGuests].sort(
+                  (a, b) =>
+                    RSVP_SORT_ORDER[a.rsvpStatus] -
+                    RSVP_SORT_ORDER[b.rsvpStatus]
+                )
+              : tabGuests;
+
+          return displayedGuests.length === 0 ? (
             <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
               {activeTab.emptyMessage}
             </div>
           ) : (
             <div className="mt-8 divide-y divide-foreground/10 border-t border-foreground/10">
-              {tabGuests.map((guest) => (
-                <div
-                  key={guest.id}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <p className="font-serif text-lg text-foreground">
-                    {guest.name}
-                  </p>
-                  <select
-                    value={guest.rsvpStatus}
-                    onChange={(event) =>
-                      handleRsvpStatusChange(
-                        guest.id,
-                        event.target.value as Guest["rsvpStatus"]
-                      )
-                    }
-                    className="border-b border-foreground/10 bg-transparent py-1 text-xs tracking-wide text-accent uppercase focus:border-accent focus:outline-none"
+              {displayedGuests.map((guest) =>
+                editingGuestId === guest.id ? (
+                  <div key={guest.id} className="flex flex-col gap-4 py-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <label className="block">
+                        <span className="text-sm tracking-wide text-muted uppercase">
+                          Name
+                        </span>
+                        <input
+                          type="text"
+                          name="guestEditName"
+                          autoComplete="off"
+                          value={guestEditDraft.name ?? ""}
+                          onChange={(event) =>
+                            setGuestEditDraft((current) => ({
+                              ...current,
+                              name: event.target.value,
+                            }))
+                          }
+                          className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm tracking-wide text-muted uppercase">
+                          Email
+                        </span>
+                        <input
+                          type="email"
+                          name="guestEditEmail"
+                          autoComplete="off"
+                          value={guestEditDraft.email ?? ""}
+                          onChange={(event) =>
+                            setGuestEditDraft((current) => ({
+                              ...current,
+                              email: event.target.value,
+                            }))
+                          }
+                          className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm tracking-wide text-muted uppercase">
+                          Phone
+                        </span>
+                        <input
+                          type="tel"
+                          name="guestEditPhone"
+                          autoComplete="off"
+                          value={guestEditDraft.phone ?? ""}
+                          onChange={(event) =>
+                            setGuestEditDraft((current) => ({
+                              ...current,
+                              phone: event.target.value,
+                            }))
+                          }
+                          className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                        />
+                      </label>
+                    </div>
+                    {guestEditError ? (
+                      <p className="text-sm text-red-600">{guestEditError}</p>
+                    ) : null}
+                    <div className="flex items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEditGuest(guest)}
+                        className="border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelEditGuest}
+                        className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={guest.id}
+                    className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3"
                   >
-                    {RSVP_STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <p className="font-serif text-lg text-foreground">
+                        {guest.name}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditGuest(guest)}
+                        className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    {guestTab === "all" ? (
+                      <div
+                        role="radiogroup"
+                        aria-label={`RSVP status for ${guest.name}`}
+                        className="flex items-center gap-4"
+                      >
+                        {RSVP_STATUS_OPTIONS.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex cursor-pointer items-center gap-1.5 text-xs tracking-wide text-accent uppercase"
+                          >
+                            <input
+                              type="radio"
+                              name={`rsvp-${guest.id}`}
+                              value={option.value}
+                              checked={guest.rsvpStatus === option.value}
+                              onChange={() =>
+                                handleRsvpStatusChange(guest.id, option.value)
+                              }
+                              className="accent-[var(--color-accent)]"
+                            />
+                            {option.label}
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <select
+                        name={`rsvp-${guest.id}`}
+                        value={guest.rsvpStatus}
+                        onChange={(event) =>
+                          handleRsvpStatusChange(
+                            guest.id,
+                            event.target.value as Guest["rsvpStatus"]
+                          )
+                        }
+                        className="border-b border-foreground/10 bg-transparent py-1 text-xs tracking-wide text-accent uppercase focus:border-accent focus:outline-none"
+                      >
+                        {RSVP_STATUS_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )
+              )}
             </div>
           );
         })()}
@@ -4239,26 +4542,86 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.photos ? null : (
           <>
-            {isGuestView ? null : (
-              <div className="mt-6">
-                <label className="inline-block border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
-                  Upload Photo
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoFileChange}
-                    className="hidden"
-                  />
-                </label>
+            <div className="mt-6">
+              <label className="inline-block border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                Upload Photo
+                <input
+                  type="file"
+                  name="photo"
+                  accept="image/*"
+                  multiple
+                  // One batch at a time, so a second selection can't
+                  // replace the progress list mid-upload.
+                  disabled={photoUploads.some(
+                    (upload) =>
+                      upload.state === "queued" || upload.state === "uploading"
+                  )}
+                  onChange={handlePhotoFileChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {photoUploads.length === 0 ? null : (
+              <div className="mt-4 flex flex-col gap-2 text-sm">
+                <p className="text-muted">
+                  {photoUploads.filter((upload) => upload.state === "done").length}{" "}
+                  of {photoUploads.length} uploaded
+                  {photoUploads.some((upload) => upload.state === "failed")
+                    ? `, ${
+                        photoUploads.filter((upload) => upload.state === "failed")
+                          .length
+                      } failed`
+                    : ""}
+                </p>
+                <ul className="flex flex-col gap-1">
+                  {photoUploads.map((upload) => (
+                    <li
+                      key={upload.key}
+                      className="flex items-center justify-between gap-4"
+                    >
+                      <span className="min-w-0 truncate text-foreground/80">
+                        {upload.fileName}
+                      </span>
+                      <span
+                        className={`shrink-0 text-xs tracking-wide uppercase ${
+                          upload.state === "failed"
+                            ? "text-red-600"
+                            : upload.state === "done"
+                              ? "text-accent"
+                              : "text-muted"
+                        }`}
+                      >
+                        {upload.state === "queued"
+                          ? "Waiting"
+                          : upload.state === "uploading"
+                            ? "Uploading…"
+                            : upload.state === "done"
+                              ? "Done"
+                              : (upload.error ?? "Failed")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {photoUploads.every(
+                  (upload) =>
+                    upload.state === "done" || upload.state === "failed"
+                ) ? (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUploads([])}
+                    className="self-start text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                  >
+                    Dismiss
+                  </button>
+                ) : null}
               </div>
             )}
 
-            {isGuestView || !photoUploadError ? null : (
-              <p className="mt-3 text-sm text-red-600">{photoUploadError}</p>
-            )}
-
             <datalist id="photo-tag-name-options">
-              {guests.map((guest) => (
+              {guests
+                .filter((guest) => guest.rsvpStatus === "confirmed")
+                .map((guest) => (
                 <option key={guest.id} value={guest.name} />
               ))}
             </datalist>
@@ -4345,7 +4708,9 @@ export default function ExperienceDetailPage() {
                               setPhotoTagInputValue(value);
 
                               const isKnownGuest = guests.some(
-                                (guest) => guest.name === value
+                                (guest) =>
+                                  guest.rsvpStatus === "confirmed" &&
+                                  guest.name === value
                               );
                               if (isKnownGuest) {
                                 handleAddPhotoTagNow(photo.id, value);
@@ -4499,6 +4864,19 @@ export default function ExperienceDetailPage() {
                       {prompt.text ?? "Write your own..."}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReflectionPromptId(NO_PROMPT_REFLECTION_CHOICE_ID)
+                    }
+                    className={`border px-4 py-3 text-left text-sm leading-snug transition-colors ${
+                      reflectionPromptId === NO_PROMPT_REFLECTION_CHOICE_ID
+                        ? "border-accent bg-accent/5 text-foreground"
+                        : "border-foreground/10 text-muted hover:border-accent hover:text-foreground"
+                    }`}
+                  >
+                    No prompt, just share anything
+                  </button>
                 </div>
               </div>
 
@@ -4536,7 +4914,11 @@ export default function ExperienceDetailPage() {
                       : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO
                   }
                   rows={3}
-                  placeholder="Share your reflection..."
+                  placeholder={
+                    reflectionPromptId === NO_PROMPT_REFLECTION_CHOICE_ID
+                      ? "Share anything..."
+                      : "Share your reflection..."
+                  }
                   className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                 />
               </label>

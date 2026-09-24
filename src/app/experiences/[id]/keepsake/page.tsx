@@ -12,10 +12,10 @@ import Modal from "@/components/Modal";
 import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import ItineraryTimeRange from "@/components/ItineraryTimeRange";
 import {
   formatDateHeading,
   formatDateRange,
-  formatTimeRange,
   getPhotoDownloadFilename,
   groupByDate,
   sanitizeForFilename,
@@ -523,7 +523,7 @@ export default function KeepsakePage() {
                     >
                       <span className="absolute top-2 -left-[calc(2rem+3px)] h-1.5 w-1.5 rounded-full bg-accent" />
                       <p className="text-sm text-muted">
-                        {formatTimeRange(item)}
+                        <ItineraryTimeRange {...item} />
                       </p>
                       <p className="mt-1 flex items-center gap-2 font-serif text-lg text-foreground">
                         <span className="shrink-0 text-muted">

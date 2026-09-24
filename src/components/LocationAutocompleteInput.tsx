@@ -11,6 +11,9 @@ type LocationAutocompleteInputProps = {
   placeholder?: string;
   required?: boolean;
   name?: string;
+  // Locations already used in this Experience, offered ahead of the Google
+  // Places results (filtered by what's been typed) so a repeat is one tap.
+  recentLocations?: string[];
   className?: string;
 };
 
@@ -28,6 +31,7 @@ export default function LocationAutocompleteInput({
   placeholder,
   required,
   name,
+  recentLocations,
   className,
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -41,6 +45,22 @@ export default function LocationAutocompleteInput({
   // Guards against a slow, stale request's results landing after a
   // newer keystroke already started a different lookup.
   const latestQueryRef = useRef("");
+
+  // Recent locations matching what's typed (all of them when the field is
+  // empty), minus the one already entered exactly.
+  function getMatchingRecents(query: string) {
+    const needle = query.trim().toLowerCase();
+    return (recentLocations ?? []).filter(
+      (location) =>
+        location !== query &&
+        (!needle || location.toLowerCase().includes(needle))
+    );
+  }
+  const matchingRecents = getMatchingRecents(value);
+  // A recent location that Places also returned is only listed once.
+  const placeResults = suggestions.filter(
+    (suggestion) => !matchingRecents.includes(suggestion.description)
+  );
 
   useEffect(() => {
     return () => {
@@ -195,7 +215,7 @@ export default function LocationAutocompleteInput({
     const trimmed = nextValue.trim();
     if (!trimmed) {
       setSuggestions([]);
-      setIsOpen(false);
+      setIsOpen(getMatchingRecents("").length > 0);
       return;
     }
 
@@ -208,7 +228,7 @@ export default function LocationAutocompleteInput({
         results.length > 0
       );
       setSuggestions(results);
-      setIsOpen(results.length > 0);
+      setIsOpen(results.length > 0 || getMatchingRecents(nextValue).length > 0);
     }, DEBOUNCE_MS);
   }
 
@@ -228,7 +248,8 @@ export default function LocationAutocompleteInput({
         value={value}
         onChange={(event) => handleInputChange(event.target.value)}
         onFocus={() => {
-          if (suggestions.length > 0) setIsOpen(true);
+          if (suggestions.length > 0 || getMatchingRecents(value).length > 0)
+            setIsOpen(true);
         }}
         placeholder={placeholder}
         className={className}
@@ -237,7 +258,9 @@ export default function LocationAutocompleteInput({
         autoComplete="off"
       />
 
-      {isOpen && suggestions.length > 0 && dropdownPosition ? (
+      {isOpen &&
+      (matchingRecents.length > 0 || placeResults.length > 0) &&
+      dropdownPosition ? (
         <ul
           ref={dropdownRef}
           data-location-autocomplete-dropdown
@@ -249,7 +272,30 @@ export default function LocationAutocompleteInput({
           }}
           className="z-20 mt-1 border border-foreground/10 bg-background shadow-lg"
         >
-          {suggestions.map((suggestion) => (
+          {matchingRecents.length > 0 ? (
+            <li
+              aria-hidden
+              className="px-3 pt-2 pb-1 text-[10px] tracking-widest text-muted uppercase"
+            >
+              Used in this Experience
+            </li>
+          ) : null}
+          {matchingRecents.map((location) => (
+            <li key={`recent-${location}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(location);
+                  setSuggestions([]);
+                  setIsOpen(false);
+                }}
+                className="block w-full px-3 py-2 text-left font-serif text-sm text-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+              >
+                {location}
+              </button>
+            </li>
+          ))}
+          {placeResults.map((suggestion) => (
             <li key={suggestion.placeId}>
               <button
                 type="button"

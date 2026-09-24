@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
 import {
   addItineraryItem,
+  getItineraryItems,
   DEFAULT_ITINERARY_ITEM_TYPE,
   ITINERARY_ITEM_TYPES,
 } from "@/data/itineraryStore";
@@ -23,6 +24,7 @@ const DRESS_CODE_PRESETS = [
   "Casual",
   "Smart Casual",
   "Cocktail",
+  "Nightlife",
   "Black Tie",
   "Beach Formal",
   "Athletic/Active",
@@ -39,16 +41,50 @@ type Experience = {
   location?: string;
 };
 
-// Wraps past midnight (23:xx -> 00:xx) rather than clamping — itinerary
-// items don't support crossing midnight (see the endTime <= startTime
-// check below), so a wrapped result just leaves the auto-suggested end
-// time invalid, same as if the user had typed an out-of-range one
-// themselves; the existing submit-time validation catches it either way.
+// Wraps past midnight (23:xx -> 00:xx) rather than clamping. An end
+// earlier than the start is valid (it means the item ends after midnight),
+// so the auto-suggested end time is a legitimate value there.
 function addOneHour(timeString: string) {
   if (!timeString) return "";
   const [hours, minutes] = timeString.split(":").map(Number);
   const nextHours = (hours + 1) % 24;
   return `${String(nextHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+// Single-day Experiences can remember one location for every new item (a
+// per-Experience convenience kept in this browser, not part of the item
+// data — each saved item still stores its own independent location).
+function sameLocationStorageKey(experienceId: string) {
+  return `yhtbt:sameItineraryLocation:${experienceId}`;
+}
+
+function loadSameLocation(
+  experienceId: string
+): { enabled: boolean; location: string } {
+  try {
+    const raw = window.localStorage.getItem(sameLocationStorageKey(experienceId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { enabled: !!parsed.enabled, location: parsed.location ?? "" };
+    }
+  } catch {}
+  return { enabled: false, location: "" };
+}
+
+function saveSameLocation(
+  experienceId: string,
+  value: { enabled: boolean; location: string } | null
+) {
+  try {
+    if (value && value.enabled) {
+      window.localStorage.setItem(
+        sameLocationStorageKey(experienceId),
+        JSON.stringify(value)
+      );
+    } else {
+      window.localStorage.removeItem(sameLocationStorageKey(experienceId));
+    }
+  } catch {}
 }
 
 export default function NewItineraryItemPage() {
@@ -67,6 +103,13 @@ export default function NewItineraryItemPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  // This Experience's own previously used item locations, most-used first,
+  // offered at the top of the location autocomplete.
+  const [recentLocations, setRecentLocations] = useState<string[]>([]);
+  const [isSameLocationForAll, setIsSameLocationForAll] = useState(false);
+  // The location remembered for "same for all items" (may still be empty
+  // until one is entered — it's captured on the first save).
+  const [sameLocationDefault, setSameLocationDefault] = useState("");
   const [isSameAsExperienceLocation, setIsSameAsExperienceLocation] =
     useState(false);
   const [dressCodeOption, setDressCodeOption] = useState("");
@@ -98,7 +141,29 @@ export default function NewItineraryItemPage() {
       if (found) {
         setExperience(found);
         setDate(found.startDate);
+
+        if (found.startDate === found.endDate) {
+          const remembered = loadSameLocation(params.id);
+          if (remembered.enabled) {
+            setIsSameLocationForAll(true);
+            setSameLocationDefault(remembered.location);
+            if (remembered.location) setLocation(remembered.location);
+          }
+        }
       }
+    });
+    getItineraryItems(params.id).then((items) => {
+      if (cancelled) return;
+      const counts = new Map<string, number>();
+      for (const item of items) {
+        const location = (item.location ?? "").trim();
+        if (location) counts.set(location, (counts.get(location) ?? 0) + 1);
+      }
+      setRecentLocations(
+        [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([location]) => location)
+      );
     });
 
     return () => {
@@ -140,8 +205,10 @@ export default function NewItineraryItemPage() {
       return;
     }
 
-    if (endTime <= startTime) {
-      setError("End time must be after start time.");
+    // An end earlier than the start is fine: it means the item runs past
+    // midnight into the next day. Only identical times are rejected.
+    if (endTime === startTime) {
+      setError("End time can't be the same as the start time.");
       return;
     }
 
@@ -159,6 +226,15 @@ export default function NewItineraryItemPage() {
         dressCode,
         type,
       });
+
+      // First save after turning "same location for all" on with an empty
+      // field: remember what was entered as the location for later items.
+      if (isSameLocationForAll && !sameLocationDefault && location.trim()) {
+        saveSameLocation(params.id, {
+          enabled: true,
+          location: location.trim(),
+        });
+      }
 
       router.push(`/experiences/${params.id}`);
     } catch {
@@ -233,6 +309,11 @@ export default function NewItineraryItemPage() {
               onChange={(event) => handleEndTimeChange(event.target.value)}
               className={FIELD_CLASSES}
             />
+            {startTime && endTime && endTime < startTime ? (
+              <p className="mt-2 text-xs text-muted">
+                Ends after midnight (the next day)
+              </p>
+            ) : null}
           </label>
         </div>
 
@@ -291,8 +372,30 @@ export default function NewItineraryItemPage() {
                 Same as Experience location
               </span>
             ) : null}
+            {experience && experience.startDate === experience.endDate ? (
+              <span className="mt-2 flex items-center gap-2 text-sm text-foreground/70">
+                <input
+                  type="checkbox"
+                  name="sameLocationForAll"
+                  checked={isSameLocationForAll}
+                  onChange={(event) => {
+                    const on = event.target.checked;
+                    setIsSameLocationForAll(on);
+                    const remembered = on ? location.trim() : "";
+                    setSameLocationDefault(remembered);
+                    saveSameLocation(
+                      params.id,
+                      on ? { enabled: true, location: remembered } : null
+                    );
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                Use the same location for all itinerary items?
+              </span>
+            ) : null}
             <LocationAutocompleteInput
               required
+              recentLocations={recentLocations}
               value={location}
               onChange={setLocation}
               placeholder="Los Angeles, CA"

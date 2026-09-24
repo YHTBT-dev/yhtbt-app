@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getExperiences } from "@/data/experiencesStore";
 import { getTodayLocalDateString } from "@/lib/format";
+import { computeExperiencePhase } from "@/lib/experiencePhase";
 
 type Tab = "all" | "hosted";
 type View = "grid" | "list";
@@ -16,6 +17,9 @@ type Experience = {
   endDate: string;
   location?: string;
   roles: string[];
+  theme?: string;
+  coverPositionX?: number;
+  coverPositionY?: number;
 };
 
 const DELETED_TOAST_VISIBLE_DURATION_MS = 3000;
@@ -327,7 +331,12 @@ export default function ExperiencesPage() {
         </div>
       ) : view === "grid" ? (
         <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredExperiences.map((experience) => (
+          {filteredExperiences.map((experience) => {
+            const isPast =
+              computeExperiencePhase(experience.startDate, experience.endDate) ===
+              "after";
+
+            return (
             <Link
               key={experience.id}
               href={`/experiences/${experience.id}`}
@@ -343,8 +352,25 @@ export default function ExperiencesPage() {
                 <img
                   src={experience.coverImage}
                   alt={experience.name}
-                  className="h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${experience.coverPositionX ?? 50}% ${experience.coverPositionY ?? 50}%`,
+                  }}
+                  className={`h-full w-full object-cover ${
+                    isPast ? "[filter:saturate(0.4)]" : ""
+                  }`}
                 />
+                {isPast ? (
+                  // Corner ribbon for Experiences that have already
+                  // happened. data-theme puts the ribbon in this
+                  // Experience's own theme so its accent matches the
+                  // Experience, not just the app default.
+                  <span
+                    data-theme={experience.theme}
+                    className="absolute top-4 -right-9 z-10 w-32 rotate-45 bg-accent py-1 text-center text-xs font-medium tracking-[0.2em] text-background uppercase shadow-sm"
+                  >
+                    YHTBT!
+                  </span>
+                ) : null}
               </div>
               <div className="pt-4">
                 <p className="font-serif text-lg text-foreground transition-colors group-hover:text-accent">
@@ -355,7 +381,8 @@ export default function ExperiencesPage() {
                 </p>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="mt-10 flex flex-col divide-y divide-foreground/10 border-t border-b border-foreground/10">
@@ -370,6 +397,9 @@ export default function ExperiencesPage() {
                 <img
                   src={experience.coverImage}
                   alt={experience.name}
+                  style={{
+                    objectPosition: `${experience.coverPositionX ?? 50}% ${experience.coverPositionY ?? 50}%`,
+                  }}
                   className="h-full w-full object-cover"
                 />
               </div>

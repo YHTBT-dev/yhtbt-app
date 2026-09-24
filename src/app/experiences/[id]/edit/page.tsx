@@ -186,6 +186,11 @@ export default function EditExperiencePage() {
       roles,
       theme,
       experienceType,
+      // A different photo starts centered again; the old focal point was
+      // chosen for the previous image.
+      ...(coverImage !== experience?.coverImage
+        ? { coverPositionX: 50, coverPositionY: 50 }
+        : {}),
     });
 
     if (!updated) {

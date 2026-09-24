@@ -24,6 +24,7 @@ const DRESS_CODE_PRESETS = [
   "Casual",
   "Smart Casual",
   "Cocktail",
+  "Nightlife",
   "Black Tie",
   "Beach Formal",
   "Athletic/Active",
@@ -148,8 +149,10 @@ export default function EditItineraryItemPage() {
       return;
     }
 
-    if (endTime <= startTime) {
-      setError("End time must be after start time.");
+    // An end earlier than the start is fine: it means the item runs past
+    // midnight into the next day. Only identical times are rejected.
+    if (endTime === startTime) {
+      setError("End time can't be the same as the start time.");
       return;
     }
 
@@ -253,6 +256,11 @@ export default function EditItineraryItemPage() {
               onChange={(event) => setEndTime(event.target.value)}
               className={FIELD_CLASSES}
             />
+            {startTime && endTime && endTime < startTime ? (
+              <p className="mt-2 text-xs text-muted">
+                Ends after midnight (the next day)
+              </p>
+            ) : null}
           </label>
         </div>
 

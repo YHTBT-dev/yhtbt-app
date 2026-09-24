@@ -120,6 +120,35 @@ export async function updateGuestStatus(id, rsvpStatus) {
   return rowToGuest(data);
 }
 
+// Edits a guest's own details (name, email, phone) — RSVP status has its
+// own function above so everConfirmed keeps being tracked. The table
+// requires at least one of email/phone, so callers should check that
+// first; a violation comes back as null like any other failed update.
+export async function updateGuest(id, fields) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .update(guestToRow({
+      name: fields.name,
+      email: fields.email,
+      phone: fields.phone,
+    }))
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[guestsStore] updateGuest failed:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return null;
+  }
+  return rowToGuest(data);
+}
+
 export async function deleteGuest(id) {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from(TABLE_NAME).delete().eq("id", id);

@@ -44,6 +44,8 @@ function rowToExperience(row) {
     id: row.id,
     name: row.name,
     coverImage: row.cover_image ?? "",
+    coverPositionX: row.cover_position_x ?? 50,
+    coverPositionY: row.cover_position_y ?? 50,
     startDate: row.start_date,
     endDate: row.end_date,
     location: row.location ?? "",
@@ -66,6 +68,10 @@ function experienceToRow(experience) {
   const row = {};
   if (experience.name !== undefined) row.name = experience.name;
   if (experience.coverImage !== undefined) row.cover_image = experience.coverImage;
+  if (experience.coverPositionX !== undefined)
+    row.cover_position_x = experience.coverPositionX;
+  if (experience.coverPositionY !== undefined)
+    row.cover_position_y = experience.coverPositionY;
   if (experience.startDate !== undefined) row.start_date = experience.startDate;
   if (experience.endDate !== undefined) row.end_date = experience.endDate;
   if (experience.location !== undefined) row.location = experience.location;
