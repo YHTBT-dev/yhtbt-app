@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
-import { hasCreatedExperience } from "@/lib/creatorName";
+import { claimLegacyExperiences, hasCreatedExperience } from "@/lib/creatorName";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
@@ -753,6 +753,9 @@ export default function ExperienceDetailPage() {
 
     getExperiences().then((experiences) => {
       if (cancelled) return;
+      // Runs before setExperience so the creator check on the first
+      // render already sees any claimed Experience.
+      claimLegacyExperiences(experiences);
       const found = experiences.find(
         (item: Experience) => String(item.id) === params.id
       );
