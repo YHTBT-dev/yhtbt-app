@@ -13,6 +13,8 @@ type LocationAutocompleteInputProps = {
   className?: string;
 };
 
+type DropdownPosition = { top: number; left: number; width: number };
+
 // A plain, always-editable text input for a free-text location field,
 // with Google Places suggestions layered on top as a dropdown — never
 // required to pick one (see fetchPlaceSuggestions in @/lib/places for
@@ -28,7 +30,10 @@ export default function LocationAutocompleteInput({
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] =
+    useState<DropdownPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards against a slow, stale request's results landing after a
@@ -40,6 +45,57 @@ export default function LocationAutocompleteInput({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // BUG FIX: the dropdown used to be positioned via plain CSS (absolute,
+  // anchored below the input through normal document flow) — that
+  // worked in Chrome's mobile emulation (which doesn't actually resize
+  // anything for a virtual keyboard) but not on a real iPhone. Opening
+  // the keyboard there shrinks the VISUAL viewport while the LAYOUT
+  // viewport (which CSS positioning is computed against) stays the same
+  // size, and Safari auto-scrolls the focused input up so it's visible
+  // above the keyboard — a document position computed for the
+  // pre-keyboard state can end up rendering in the region the keyboard
+  // now covers, or not track that scroll correctly at all.
+  //
+  // Fixed by switching to position: fixed with coordinates read fresh
+  // from the input's own getBoundingClientRect() — which always
+  // reflects where the input currently, actually is on screen —
+  // recomputed whenever the dropdown opens AND on every visualViewport
+  // resize/scroll event, which is what fires as the keyboard animates
+  // open/closed on mobile Safari (the standard, documented way to
+  // detect this). Falls back to plain window scroll/resize listeners
+  // for browsers without the VisualViewport API.
+  function updateDropdownPosition() {
+    const inputEl = inputRef.current;
+    if (!inputEl) return;
+
+    const rect = inputEl.getBoundingClientRect();
+    setDropdownPosition({ top: rect.bottom, left: rect.left, width: rect.width });
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updateDropdownPosition();
+
+    const visualViewport = window.visualViewport;
+    if (visualViewport) {
+      visualViewport.addEventListener("resize", updateDropdownPosition);
+      visualViewport.addEventListener("scroll", updateDropdownPosition);
+    }
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    window.addEventListener("resize", updateDropdownPosition);
+
+    return () => {
+      if (visualViewport) {
+        visualViewport.removeEventListener("resize", updateDropdownPosition);
+        visualViewport.removeEventListener("scroll", updateDropdownPosition);
+      }
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+      window.removeEventListener("resize", updateDropdownPosition);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // TEMPORARY diagnostic logging — added to track down a report that the
   // suggestions dropdown fails specifically at narrow/mobile viewport
@@ -75,6 +131,15 @@ export default function LocationAutocompleteInput({
       console.log("[LocationAutocomplete] dropdown is in the DOM", {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
+        visualViewport: window.visualViewport
+          ? {
+              width: window.visualViewport.width,
+              height: window.visualViewport.height,
+              offsetTop: window.visualViewport.offsetTop,
+              offsetLeft: window.visualViewport.offsetLeft,
+            }
+          : "not supported",
+        dropdownPosition,
         containerRect,
         dropdownRect,
         computedDisplay: getComputedStyle(dropdownEl).display,
@@ -89,7 +154,7 @@ export default function LocationAutocompleteInput({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [isOpen, suggestions]);
+  }, [isOpen, suggestions, dropdownPosition]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -154,6 +219,7 @@ export default function LocationAutocompleteInput({
   return (
     <div ref={containerRef} className="relative">
       <input
+        ref={inputRef}
         type="text"
         required={required}
         value={value}
@@ -168,11 +234,17 @@ export default function LocationAutocompleteInput({
         autoComplete="off"
       />
 
-      {isOpen && suggestions.length > 0 ? (
+      {isOpen && suggestions.length > 0 && dropdownPosition ? (
         <ul
           ref={dropdownRef}
           data-location-autocomplete-dropdown
-          className="absolute top-full left-0 z-20 mt-1 w-full border border-foreground/10 bg-background shadow-lg"
+          style={{
+            position: "fixed",
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: dropdownPosition.width,
+          }}
+          className="z-20 mt-1 border border-foreground/10 bg-background shadow-lg"
         >
           {suggestions.map((suggestion) => (
             <li key={suggestion.placeId}>
