@@ -9,6 +9,7 @@ import { getGuests } from "@/data/guestsStore";
 import { getPhotos } from "@/data/photosStore";
 import { getReflections } from "@/data/reflectionsStore";
 import Modal from "@/components/Modal";
+import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import {
@@ -266,6 +267,7 @@ export default function KeepsakePage() {
   const [city, setCity] = useState("");
   const [addressState, setAddressState] = useState("");
   const [zip, setZip] = useState("");
+  const [zipError, setZipError] = useState("");
   const [country, setCountry] = useState(DEFAULT_BOOK_ORDER_COUNTRY);
   const [bookOrderError, setBookOrderError] = useState("");
   const [isSubmittingBookOrder, setIsSubmittingBookOrder] = useState(false);
@@ -346,6 +348,7 @@ export default function KeepsakePage() {
     setCity("");
     setAddressState("");
     setZip("");
+    setZipError("");
     setCountry(DEFAULT_BOOK_ORDER_COUNTRY);
     setBookOrderError("");
   }
@@ -353,6 +356,14 @@ export default function KeepsakePage() {
   async function handleSubmitBookOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBookOrderError("");
+
+    // Only US addresses use 5-digit ZIPs — other countries' postal codes
+    // vary too much (letters, spaces, 4-10 digits) to enforce one shape.
+    if (country === DEFAULT_BOOK_ORDER_COUNTRY && !/^\d{5}$/.test(zip.trim())) {
+      setZipError("Enter a 5-digit ZIP code.");
+      return;
+    }
+    setZipError("");
     setIsSubmittingBookOrder(true);
 
     try {
@@ -744,11 +755,10 @@ export default function KeepsakePage() {
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
             <label className="block">
               <span className={BOOK_ORDER_LABEL_CLASSES}>City</span>
-              <input
-                type="text"
+              <LocationAutocompleteInput
                 required
                 value={city}
-                onChange={(event) => setCity(event.target.value)}
+                onChange={setCity}
                 placeholder="Los Angeles"
                 className={BOOK_ORDER_FIELD_CLASSES}
               />
@@ -812,10 +822,16 @@ export default function KeepsakePage() {
                 type="text"
                 required
                 value={zip}
-                onChange={(event) => setZip(event.target.value)}
+                onChange={(event) => {
+                  setZip(event.target.value);
+                  setZipError("");
+                }}
                 placeholder="90001"
                 className={BOOK_ORDER_FIELD_CLASSES}
               />
+              {zipError ? (
+                <p className="mt-2 text-sm text-red-600">{zipError}</p>
+              ) : null}
             </label>
           </div>
 
