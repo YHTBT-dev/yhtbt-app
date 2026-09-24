@@ -59,6 +59,7 @@ import {
   updateRecommendation,
 } from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
+import RenderErrorBoundary from "@/components/RenderErrorBoundary";
 import ThemePicker from "@/components/ThemePicker";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
@@ -2034,6 +2035,10 @@ export default function ExperienceDetailPage() {
     hostTools: !isGuestView,
   };
 
+  const hasAnyVisibleTab = TAB_ORDER_FOR_DEFAULT[phase].some(
+    (tab) => hasContentByTab[tab] !== false
+  );
+
   // Falls back to the phase's first visible tab when nothing has been
   // picked yet, or when the picked tab just disappeared (e.g. switching to
   // locking while on a host-only tab).
@@ -2129,6 +2134,15 @@ export default function ExperienceDetailPage() {
         </p>
       </div>
 
+      <RenderErrorBoundary label="experience-tabs">
+      {!hasAnyVisibleTab ? (
+        // Locked view of an Experience with nothing to show yet: every tab
+        // is hidden, so show a plain message instead of an empty tab bar.
+        <div className="flex min-h-[30vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+          Nothing here yet — check back soon
+        </div>
+      ) : (
+      <>
       <div className="mt-8">
         <ExperienceTabBar
           phase={phase}
@@ -4888,6 +4902,9 @@ export default function ExperienceDetailPage() {
       </Modal>
         </>
       ) : null}
+      </>
+      )}
+      </RenderErrorBoundary>
       </main>
     </>
   );
