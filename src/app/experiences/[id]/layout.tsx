@@ -59,6 +59,22 @@ export default function ExperienceLayout({
     };
   }, [params.id, pathname]);
 
+  // An in-place theme change (e.g. the Host Tools theme modal) doesn't
+  // change the route, so the effect above never re-runs for it — those
+  // callers announce it with this event instead.
+  useEffect(() => {
+    function handleThemeChanged(event: Event) {
+      const { experienceId, theme: nextTheme } = (
+        event as CustomEvent<{ experienceId: string; theme: string }>
+      ).detail;
+      if (experienceId === params.id) setTheme(nextTheme);
+    }
+
+    window.addEventListener("yhtbt:theme-changed", handleThemeChanged);
+    return () =>
+      window.removeEventListener("yhtbt:theme-changed", handleThemeChanged);
+  }, [params.id]);
+
   // bg-background/text-foreground here matter, not just data-theme: <body>
   // (in the root layout) paints its own background/text color from
   // whatever theme is on <html>, which is always "editorial-classic" — and

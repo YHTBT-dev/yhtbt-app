@@ -1,9 +1,10 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
@@ -57,10 +58,12 @@ import {
   updateRecommendation,
 } from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
+import ThemePicker from "@/components/ThemePicker";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
   addDaysToLocalDateString,
   formatDateHeading,
+  formatDateRange,
   formatLocalDateString,
   formatRelativeTime,
   formatShortDate,
@@ -132,6 +135,7 @@ const GUEST_TABS: {
 type Experience = {
   id: number;
   name: string;
+  theme?: string;
   coverImage: string;
   startDate: string;
   endDate: string;
@@ -462,13 +466,9 @@ const TAB_ORDER_FOR_DEFAULT: Record<ExperiencePhase, ExperienceTabId[]> = {
   after: ["photos", "chat", "hostTools", "notes", "itinerary", "guests", "updates", "details"],
 };
 
-const TAB_PLACEHOLDER_TEXT: Partial<Record<ExperienceTabId, string>> = {
-  chat: "Placeholder: the group conversation will live here.",
-  hostTools: "Placeholder: host-only controls (delete, theme, preview-as-guest) will live here.",
-};
-
 export default function ExperienceTabsPreviewPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [experience, setExperience] = useState<Experience | null | undefined>(
     undefined
   );
@@ -596,6 +596,13 @@ export default function ExperienceTabsPreviewPage() {
   const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [themeDraft, setThemeDraft] = useState("editorial-classic");
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
@@ -615,6 +622,16 @@ export default function ExperienceTabsPreviewPage() {
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
+
+  useEffect(() => {
+    function handleScroll() {
+      setIsScrolled(window.scrollY > 0);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30000);
@@ -1348,6 +1365,58 @@ export default function ExperienceTabsPreviewPage() {
     }, NOTE_SAVE_DEBOUNCE_MS);
   }
 
+  function handleOpenDeleteModal() {
+    // Reset explicitly on open (not just on close) so stale text can't
+    // possibly carry over from a previous open, however this modal got
+    // dismissed last time.
+    setDeleteConfirmationInput("");
+    setIsDeleteModalOpen(true);
+  }
+
+  function handleCloseDeleteModal() {
+    setIsDeleteModalOpen(false);
+    setDeleteConfirmationInput("");
+  }
+
+  async function handleConfirmDelete() {
+    if (!experience) return;
+
+    const matches =
+      deleteConfirmationInput.trim().toLowerCase() ===
+      experience.name.trim().toLowerCase();
+    if (!matches) return;
+
+    setIsDeleting(true);
+    sessionStorage.setItem("justDeleted", experience.name);
+    await deleteExperienceCompletely(params.id);
+    router.push("/experiences");
+  }
+
+  function handleOpenThemeModal() {
+    setThemeDraft(experience?.theme ?? "editorial-classic");
+    setIsThemeModalOpen(true);
+  }
+
+  // Theme-only save (the full edit form isn't involved). The layout that
+  // paints data-theme reads the theme on route changes, so it's told about
+  // this in-place change via a window event.
+  async function handleSaveTheme() {
+    if (!experience) return;
+
+    setIsSavingTheme(true);
+    await updateExperience(Number(params.id), { theme: themeDraft });
+    setExperience((current) =>
+      current ? { ...current, theme: themeDraft } : current
+    );
+    window.dispatchEvent(
+      new CustomEvent("yhtbt:theme-changed", {
+        detail: { experienceId: params.id, theme: themeDraft },
+      })
+    );
+    setIsSavingTheme(false);
+    setIsThemeModalOpen(false);
+  }
+
   async function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1811,6 +1880,13 @@ export default function ExperienceTabsPreviewPage() {
     ? polls.filter((poll) => poll.isOpen)
     : polls;
 
+  // Trimmed and case-insensitive so stray whitespace or casing doesn't
+  // block an otherwise-correct confirmation.
+  const isDeleteConfirmationMatching =
+    deleteConfirmationInput.trim().toLowerCase() ===
+    experience.name.trim().toLowerCase();
+
+
   // Recomputed on every render (never stored) — see computeExperiencePhase.
   // The override below exists only for this preview, so all three
   // phases' tab orderings can be exercised from a single Experience
@@ -1821,10 +1897,20 @@ export default function ExperienceTabsPreviewPage() {
   );
   const phase = phaseOverride === "actual" ? actualPhase : phaseOverride;
 
+  // First tab in the phase's order that isn't hidden (e.g. During leads
+  // with Chat, which stays hidden until it's built).
+  function firstVisibleTab(forPhase: ExperiencePhase): ExperienceTabId {
+    return (
+      TAB_ORDER_FOR_DEFAULT[forPhase].find(
+        (tab) => hasContentByTab[tab] !== false
+      ) ?? "itinerary"
+    );
+  }
+
   function handlePhaseOverrideChange(next: ExperiencePhase | "actual") {
     setPhaseOverride(next);
     const resolvedPhase = next === "actual" ? actualPhase : next;
-    setActiveTab(TAB_ORDER_FOR_DEFAULT[resolvedPhase][0]);
+    setActiveTab(firstVisibleTab(resolvedPhase));
   }
 
   // Itinerary and Guests are always shown, empty or not. Updates hides
@@ -1836,6 +1922,9 @@ export default function ExperienceTabsPreviewPage() {
   // a guest has nothing to do in an empty section, so it's hidden there.
   // Tabs not migrated yet (Chat) stay visible via the tab bar's default.
   const hasContentByTab: Partial<Record<ExperienceTabId, boolean>> = {
+    // Chat isn't built yet: hidden in every phase, no placeholder, until
+    // the real feature exists and has content to show.
+    chat: false,
     itinerary: true,
     guests: true,
     updates: !isPreviewingAsGuest || updates.length > 0,
@@ -1849,8 +1938,9 @@ export default function ExperienceTabsPreviewPage() {
     // Private to the host, as on the real page — no content check, just
     // host-only.
     notes: !isPreviewingAsGuest,
-    // Host-only regardless of content (Book Orders now; Delete Experience,
-    // the theme picker, and the Preview-as-Guest toggle once migrated).
+    // Host-only regardless of content: Delete Experience and the
+    // Preview-as-Guest toggle always exist for a host, so it's never
+    // empty for them.
     hostTools: !isPreviewingAsGuest,
   };
 
@@ -1858,25 +1948,72 @@ export default function ExperienceTabsPreviewPage() {
   // to guest preview while on an empty Updates tab).
   const resolvedActiveTab: ExperienceTabId =
     hasContentByTab[activeTab] === false
-      ? TAB_ORDER_FOR_DEFAULT[phase][0]
+      ? firstVisibleTab(phase)
       : activeTab;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-      <Link
-        href={`/experiences/${params.id}`}
-        className="block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+      <div
+        className={`sticky top-0 z-10 bg-background pb-4 transition-shadow duration-200 ${
+          isScrolled
+            ? "border-b border-foreground/10 shadow-sm"
+            : "border-b border-transparent"
+        }`}
       >
-        &larr; Back to {experience.name}
-      </Link>
+        <Link
+          href="/experiences"
+          className="inline-block font-serif text-sm tracking-[0.2em] text-foreground uppercase transition-colors hover:text-accent"
+        >
+          YHTBT
+        </Link>
 
-      <h1 className="mt-3 font-serif text-3xl text-foreground sm:text-4xl">
-        Tab Navigation Preview
-      </h1>
-      <p className="mt-2 text-sm text-muted">
-        Isolated test view — not wired into the real Experience page.
-        Actual phase for this Experience (today vs. {experience.startDate}
-        –{experience.endDate}): <strong>{actualPhase}</strong>.
+        {/* The exit control lives here (not in Host Tools) because Host
+            Tools doesn't exist while previewing as a guest — this header
+            is the only thing visible on every tab in both views. */}
+        {isPreviewingAsGuest ? (
+          <div className="mt-3 flex items-center gap-3">
+            <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+              Previewing as: Guest
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsPreviewingAsGuest(false)}
+              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+            >
+              Switch to Host View
+            </button>
+          </div>
+        ) : null}
+
+        <div className="mt-3 flex items-baseline gap-3">
+          <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
+            {experience.name}
+          </h1>
+          {isPreviewingAsGuest ? null : (
+            <Link
+              href={`/experiences/${params.id}/edit`}
+              className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+            >
+              Edit Experience
+            </Link>
+          )}
+        </div>
+        <p className="mt-2 text-sm text-foreground/60">
+          {formatDateRange(experience.startDate, experience.endDate)}
+          {experience.location ? ` · ${experience.location}` : ""}
+        </p>
+      </div>
+
+      <p className="mt-6 text-sm text-muted">
+        Tab navigation preview — isolated test view, not wired into the real
+        Experience page. Actual phase (today vs. {experience.startDate}
+        –{experience.endDate}): <strong>{actualPhase}</strong>.{" "}
+        <Link
+          href={`/experiences/${params.id}`}
+          className="underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          Back to the real page
+        </Link>
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -1895,18 +2032,6 @@ export default function ExperienceTabsPreviewPage() {
             {option.label}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => setIsPreviewingAsGuest((current) => !current)}
-          aria-pressed={isPreviewingAsGuest}
-          className={`border px-3 py-1.5 text-xs tracking-wide uppercase transition-colors ${
-            isPreviewingAsGuest
-              ? "border-accent bg-accent/10 text-accent"
-              : "border-foreground/10 text-muted hover:border-accent/50 hover:text-accent"
-          }`}
-        >
-          {isPreviewingAsGuest ? "Previewing as: Guest" : "Host View"}
-        </button>
       </div>
 
       <div className="mt-8">
@@ -4490,22 +4615,37 @@ export default function ExperienceTabsPreviewPage() {
       </>
       )}
         </>
-      ) : (
+      ) : resolvedActiveTab === "hostTools" ? (
         <>
-      {resolvedActiveTab === "hostTools" && !isPreviewingAsGuest && bookOrders.length > 0 ? (
-      <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">
+        <div className="mt-8 divide-y divide-foreground/10 border-y border-foreground/10">
           <button
             type="button"
-            onClick={() => toggleSection("bookOrders")}
-            className="flex items-center gap-2 text-left"
+            onClick={() => setIsPreviewingAsGuest((current) => !current)}
+            className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
           >
-            <ChevronIcon collapsed={!!collapsedSections.bookOrders} />
-            Book Orders
+            {isPreviewingAsGuest ? "Switch to Host View" : "Preview as Guest"}
           </button>
-        </h2>
 
-        {collapsedSections.bookOrders ? null : (
+          <button
+            type="button"
+            onClick={handleOpenThemeModal}
+            className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+          >
+            Change theme
+          </button>
+
+          {bookOrders.length > 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("bookOrders")}
+                className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+              >
+                <ChevronIcon collapsed={!!collapsedSections.bookOrders} />
+                Book Orders ({bookOrders.length})
+              </button>
+              {collapsedSections.bookOrders ? null : (
+                <div className="pb-6">
           <div className="mt-6 flex flex-col gap-8">
             {bookOrders.map((order) => (
               <div
@@ -4547,19 +4687,102 @@ export default function ExperienceTabsPreviewPage() {
               </div>
             ))}
           </div>
-        )}
-      </div>
-      ) : null}
-        <div className="mt-8 border border-foreground/10 p-6">
-          <h2 className="font-serif text-xl text-foreground capitalize">
-            {resolvedActiveTab.replace(/([A-Z])/g, " $1")}
-          </h2>
-          <p className="mt-3 text-sm text-muted italic">
-            {TAB_PLACEHOLDER_TEXT[resolvedActiveTab]}
-          </p>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={handleOpenDeleteModal}
+            className="flex w-full items-center py-4 text-left text-sm tracking-wide text-red-600/70 transition-colors hover:text-red-600"
+          >
+            Delete Experience
+          </button>
         </div>
+
+      <Modal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        title="Change Theme"
+      >
+        <ThemePicker value={themeDraft} onChange={setThemeDraft} />
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleSaveTheme}
+            disabled={isSavingTheme}
+            className="border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSavingTheme ? "Saving…" : "Save Theme"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(false)}
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        title="Delete Experience"
+      >
+        <p className="text-foreground/70">
+          This permanently deletes{" "}
+          <strong className="font-serif font-normal text-foreground">
+            {experience.name}
+          </strong>{" "}
+          and everything attached to it — itinerary, guests, travel
+          details, photos, notes, FAQs, polls, and updates. This
+          can&apos;t be undone.
+        </p>
+
+        <label className="mt-6 block">
+          <span className="text-sm tracking-wide text-muted uppercase">
+            Type &quot;{experience.name}&quot; to confirm
+          </span>
+          <input
+            type="text"
+            value={deleteConfirmationInput}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setDeleteConfirmationInput(nextValue);
+              console.log("Delete confirmation:", {
+                typed: nextValue,
+                expected: experience.name,
+                matches:
+                  nextValue.trim().toLowerCase() ===
+                  experience.name.trim().toLowerCase(),
+              });
+            }}
+            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+          />
+        </label>
+
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleConfirmDelete}
+            disabled={!isDeleteConfirmationMatching || isDeleting}
+            className="border border-red-600 px-6 py-3 text-sm tracking-wide text-red-600 uppercase transition-colors hover:bg-red-600 hover:text-background disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isDeleting ? "Deleting…" : "Delete Experience"}
+          </button>
+          <button
+            type="button"
+            onClick={handleCloseDeleteModal}
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
         </>
-      )}
+      ) : null}
     </main>
   );
 }
