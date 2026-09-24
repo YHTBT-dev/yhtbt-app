@@ -35,6 +35,7 @@ type Experience = {
   name: string;
   startDate: string;
   endDate: string;
+  location?: string;
 };
 
 // Wraps past midnight (23:xx -> 00:xx) rather than clamping — itinerary
@@ -65,6 +66,8 @@ export default function NewItineraryItemPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [isSameAsExperienceLocation, setIsSameAsExperienceLocation] =
+    useState(false);
   const [dressCodeOption, setDressCodeOption] = useState("");
   const [dressCodeOther, setDressCodeOther] = useState("");
   const [error, setError] = useState("");
@@ -267,6 +270,26 @@ export default function NewItineraryItemPage() {
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
           <label className="block">
             <span className={LABEL_CLASSES}>Location</span>
+            {experience?.location ? (
+              // Just a shortcut to fill in the same text — this item keeps
+              // its own independent location, editable afterward, and
+              // unchecking leaves whatever is currently in the field.
+              <span className="mt-2 flex items-center gap-2 text-sm text-foreground/70">
+                <input
+                  type="checkbox"
+                  name="sameAsExperienceLocation"
+                  checked={isSameAsExperienceLocation}
+                  onChange={(event) => {
+                    setIsSameAsExperienceLocation(event.target.checked);
+                    if (event.target.checked && experience?.location) {
+                      setLocation(experience.location);
+                    }
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                Same as Experience location
+              </span>
+            ) : null}
             <LocationAutocompleteInput
               required
               value={location}
@@ -304,9 +327,8 @@ export default function NewItineraryItemPage() {
         </div>
 
         <label className="block">
-          <span className={LABEL_CLASSES}>Description</span>
+          <span className={LABEL_CLASSES}>Description (Optional)</span>
           <textarea
-            required
             rows={4}
             value={description}
             onChange={(event) => setDescription(event.target.value)}

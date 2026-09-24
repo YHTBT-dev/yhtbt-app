@@ -327,9 +327,8 @@ export default function EditItineraryItemPage() {
         </div>
 
         <label className="block">
-          <span className={LABEL_CLASSES}>Description</span>
+          <span className={LABEL_CLASSES}>Description (Optional)</span>
           <textarea
-            required
             rows={4}
             value={description}
             onChange={(event) => setDescription(event.target.value)}

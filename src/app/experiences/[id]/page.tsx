@@ -2099,20 +2099,30 @@ export default function ExperienceDetailPage() {
           {/* Always in the header (both states) so it's reachable on every
               tab, including the ones that only exist when unlocked.
               Outline = locked (guest view); filled + accent = unlocked. */}
-          <button
-            type="button"
-            onClick={() => setManualUnlock(!isUnlocked)}
-            aria-pressed={isUnlocked}
-            aria-label={
-              isUnlocked ? "Host view — tap to lock" : "Guest view — tap to unlock"
-            }
-            title={isUnlocked ? "Unlocked — tap to lock" : "Locked — tap to unlock"}
-            className={`shrink-0 transition-colors ${
-              isUnlocked ? "text-accent" : "text-muted hover:text-accent"
-            }`}
-          >
-            <GearIcon filled={isUnlocked} />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Only for the creator's own browser while locked — a host
+                who chose to preview. Anyone else who is locked is just
+                seeing the default view, not previewing anything. */}
+            {isCreatorBrowser && isGuestView ? (
+              <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+                Previewing as Guest
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setManualUnlock(!isUnlocked)}
+              aria-pressed={isUnlocked}
+              aria-label={
+                isUnlocked ? "Host view — tap to lock" : "Guest view — tap to unlock"
+              }
+              title={isUnlocked ? "Unlocked — tap to lock" : "Locked — tap to unlock"}
+              className={`shrink-0 transition-colors ${
+                isUnlocked ? "text-accent" : "text-muted hover:text-accent"
+              }`}
+            >
+              <GearIcon filled={isUnlocked} />
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 flex items-baseline gap-3">
