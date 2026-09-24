@@ -4,8 +4,8 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
+import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import { getNote, saveNote } from "@/data/notesStore";
@@ -58,6 +58,7 @@ import {
   updateRecommendation,
 } from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
+import ThemePicker from "@/components/ThemePicker";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
   addDaysToLocalDateString,
@@ -78,15 +79,20 @@ import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
 import DateRangePickerField, {
   type DateRange,
 } from "@/components/DateRangePickerField";
+import { computeExperiencePhase, type ExperiencePhase } from "@/lib/experiencePhase";
+import ExperienceTabBar, {
+  type ExperienceTabId,
+} from "@/components/ExperienceTabBar";
 
-// react-quill-new relies on the browser's `document`, so it can only be
-// loaded on the client.
+// Experience detail page: a phase-aware tab shell (Before/During/After
+// reorders and shows tabs; see ExperienceTabBar and experiencePhase).
+
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 
-const NOTE_SAVE_DEBOUNCE_MS = 800;
-const SAVED_INDICATOR_DURATION_MS = 2000;
 const CREATED_TOAST_VISIBLE_DURATION_MS = 3000;
 const CREATED_TOAST_FADE_DURATION_MS = 500;
+const NOTE_SAVE_DEBOUNCE_MS = 800;
+const SAVED_INDICATOR_DURATION_MS = 2000;
 const NOTE_TOOLBAR_MODULES = {
   toolbar: [["bold", "italic"], [{ list: "bullet" }]],
 };
@@ -124,15 +130,18 @@ const GUEST_TABS: {
   // since a guest is never meant to see the host's live RSVP-status tabs.
 ];
 
+
 type Experience = {
   id: number;
   name: string;
+  theme?: string;
   coverImage: string;
   startDate: string;
   endDate: string;
   location?: string;
   roles: string[];
   reflectionsEnabled: boolean;
+  showAttendeeCount?: boolean;
   experienceType?: string;
   paid: boolean;
 };
@@ -162,12 +171,37 @@ type Guest = {
   everConfirmed?: boolean;
 };
 
+type BookOrder = {
+  id: number;
+  experienceId: string;
+  recipientName: string;
+  shippingAddress: {
+    line1: string;
+    line2: string;
+    city: string;
+    state: string;
+    zip: string;
+    country: string;
+  };
+  status: string;
+  stripeSessionId: string;
+  createdAt: string;
+};
+
 type Update = {
   id: number;
   experienceId: string;
   message: string;
   timestamp: string;
 };
+
+
+
+
+// Tighter when a photo is attached, since the response then shares space
+// with the prompt (see the Reflections feed layout below).
+// Polaroid card rendering (fixed palette, rotation, tints, truncation)
+// lives in src/components/PolaroidCard.tsx, shared with the keepsake page.
 
 type Faq = {
   id: number;
@@ -213,23 +247,6 @@ type Reflection = {
   editedAt: string | null;
 };
 
-type BookOrder = {
-  id: number;
-  experienceId: string;
-  recipientName: string;
-  shippingAddress: {
-    line1: string;
-    line2: string;
-    city: string;
-    state: string;
-    zip: string;
-    country: string;
-  };
-  status: string;
-  stripeSessionId: string;
-  createdAt: string;
-};
-
 type Recommendation = {
   id: number;
   experienceId: string;
@@ -252,7 +269,6 @@ const REFLECTION_FIELD_CLASSES =
   "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
 const REFLECTION_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
 // Polaroid card rendering (fixed palette, rotation, tints, truncation)
-// lives in src/components/PolaroidCard.tsx, shared with the keepsake page.
 
 type FlightDetail = {
   id: number;
@@ -437,15 +453,21 @@ function TrashIcon() {
   );
 }
 
+const TAB_ORDER_FOR_DEFAULT: Record<ExperiencePhase, ExperienceTabId[]> = {
+  before: ["itinerary", "guests", "updates", "chat", "details", "photos", "notes", "hostTools"],
+  during: ["chat", "updates", "itinerary", "photos", "notes", "guests", "details", "hostTools"],
+  after: ["photos", "chat", "hostTools", "notes", "itinerary", "guests", "updates", "details"],
+};
+
 export default function ExperienceDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [experience, setExperience] = useState<Experience | null | undefined>(
     undefined
   );
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
+  // null = "the phase's default (first visible) tab" until the user picks one.
+  const [activeTab, setActiveTab] = useState<ExperienceTabId | null>(null);
+  const [coverImageError, setCoverImageError] = useState(false);
   // Shown only right after landing here from creating this Experience (via
   // the sessionStorage "justCreated" flag set right before the redirect),
   // not on normal visits. "Mounted" keeps it in the DOM through the
@@ -464,6 +486,7 @@ export default function ExperienceDetailPage() {
       typeof window !== "undefined" &&
       sessionStorage.getItem("justCreated") === params.id
   );
+
   const [itineraryItems, setItineraryItems] = useState<ItineraryItem[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [guestName, setGuestName] = useState("");
@@ -504,17 +527,7 @@ export default function ExperienceDetailPage() {
     Record<string, string>
   >({});
   const [travelDetailEditError, setTravelDetailEditError] = useState("");
-  const [note, setNote] = useState("");
-  const [showSaved, setShowSaved] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
-  // Local-only, resets on every page load; purely a visual preview, not
   // real access control.
-  const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
-  const [now, setNow] = useState(() => new Date());
-  const [coverImageError, setCoverImageError] = useState(false);
-  const [updates, setUpdates] = useState<Update[]>([]);
-  const [updateMessage, setUpdateMessage] = useState("");
-  const [updateError, setUpdateError] = useState("");
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
@@ -567,7 +580,6 @@ export default function ExperienceDetailPage() {
   // Storage until the edit is actually saved). "" for a new reflection.
   const [reflectionOriginalPhoto, setReflectionOriginalPhoto] = useState("");
   const [myReflectionIds, setMyReflectionIds] = useState<number[]>([]);
-  const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>(
     []
   );
@@ -588,6 +600,30 @@ export default function ExperienceDetailPage() {
     Record<string, string>
   >({});
   const [recommendationEditError, setRecommendationEditError] = useState("");
+  const [note, setNote] = useState("");
+  const [showSaved, setShowSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [themeDraft, setThemeDraft] = useState("editorial-classic");
+  const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmationInput, setDeleteConfirmationInput] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
+  const [now, setNow] = useState(() => new Date());
+  const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
+  // The one place "is the viewer a guest" is decided. Today that's only
+  // the host's Preview as Guest toggle; when real guest accounts exist,
+  // derive this from the viewer's role instead (e.g. `role === "guest"
+  // || isPreviewingAsGuest`) and every guest-facing check below follows.
+  const isGuestView = isPreviewingAsGuest;
+  const [updates, setUpdates] = useState<Update[]>([]);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateError, setUpdateError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [isInviteLinkCopied, setIsInviteLinkCopied] = useState(false);
   // Shown instead of adding the guest when a free-tier Experience is
@@ -601,10 +637,6 @@ export default function ExperienceDetailPage() {
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
   >({});
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
 
   useEffect(() => {
     function handleScroll() {
@@ -649,11 +681,6 @@ export default function ExperienceDetailPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Experiences, Guests, Itinerary Items, Travel Details, Photos,
-    // Polls, FAQs, Updates, Reflections, and Book Orders come from
-    // Supabase now — every other store here is still localStorage
-    // (synchronous), so they load immediately below while these resolve
-    // separately.
     getExperiences().then((experiences) => {
       if (cancelled) return;
       const found = experiences.find(
@@ -661,6 +688,7 @@ export default function ExperienceDetailPage() {
       );
       setExperience(found ?? null);
     });
+    setCoverImageError(false);
     getGuests(params.id).then((fetched) => {
       if (!cancelled) setGuests(fetched);
     });
@@ -670,10 +698,13 @@ export default function ExperienceDetailPage() {
     getTravelDetails(params.id).then((fetched) => {
       if (!cancelled) setTravelDetails(fetched);
     });
-
-    setCoverImageError(false);
+    getUpdates(params.id).then((fetched) => {
+      if (!cancelled) setUpdates(fetched);
+    });
+    getBookOrders(params.id).then((fetched) => {
+      if (!cancelled) setBookOrders(fetched);
+    });
     setNote(getNote(params.id));
-    setCollapsedSections(loadCollapsedSections(params.id));
     setVotedPollIds(getVotedPollIds());
     getPhotos(params.id).then((fetched) => {
       if (!cancelled) setPhotos(fetched);
@@ -684,22 +715,18 @@ export default function ExperienceDetailPage() {
     getFaqs(params.id).then((fetched) => {
       if (!cancelled) setFaqs(fetched);
     });
-    getUpdates(params.id).then((fetched) => {
-      if (!cancelled) setUpdates(fetched);
-    });
     getReflections(params.id).then((fetched) => {
       if (!cancelled) setReflections(fetched);
     });
     setMyReflectionIds(getMyReflectionIds());
-    getBookOrders(params.id).then((fetched) => {
-      if (!cancelled) setBookOrders(fetched);
-    });
     setRecommendations(getRecommendations(params.id));
+    setCollapsedSections(loadCollapsedSections(params.id));
 
     return () => {
       cancelled = true;
     };
-  }, [params.id]);
+  }
+  , [params.id]);
 
   function toggleSection(section: string) {
     setCollapsedSections((current) => {
@@ -709,48 +736,13 @@ export default function ExperienceDetailPage() {
     });
   }
 
-  function handleOpenDeleteModal() {
-    // Reset explicitly on open (not just on close) so stale text can't
-    // possibly carry over from a previous open, however this modal got
-    // dismissed last time.
-    setDeleteConfirmationInput("");
-    setIsDeleteModalOpen(true);
-  }
 
-  function handleCloseDeleteModal() {
-    setIsDeleteModalOpen(false);
-    setDeleteConfirmationInput("");
-  }
-
-  async function handleConfirmDelete() {
-    if (!experience) return;
-
-    const matches =
-      deleteConfirmationInput.trim().toLowerCase() ===
-      experience.name.trim().toLowerCase();
-    if (!matches) return;
-
-    setIsDeleting(true);
-    sessionStorage.setItem("justDeleted", experience.name);
-    await deleteExperienceCompletely(params.id);
-    router.push("/experiences");
-  }
-
-  async function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    try {
-      const newUpdate = await addUpdate({
-        experienceId: params.id,
-        message: updateMessage,
-      });
-
-      setUpdates((current) => [newUpdate, ...current]);
-      setUpdateMessage("");
-      setUpdateError("");
-    } catch {
-      setUpdateError("Could not post this update. Please try again.");
-    }
+  async function handleBookOrderStatusChange(id: number, status: string) {
+    const updated = await updateBookOrderStatus(id, status);
+    if (!updated) return;
+    setBookOrders((current) =>
+      current.map((order) => (order.id === id ? updated : order))
+    );
   }
 
   async function handleAddFaq(event: FormEvent<HTMLFormElement>) {
@@ -1003,13 +995,6 @@ export default function ExperienceDetailPage() {
     if (linkingPhotoId === photoId) {
       setLinkingPhotoId(null);
     }
-  }
-
-  async function handleDeleteItineraryItem(itemId: number) {
-    if (!window.confirm("Delete this item?")) return;
-
-    await deleteItineraryItem(itemId);
-    setItineraryItems((current) => current.filter((item) => item.id !== itemId));
   }
 
   function handleStartLinkPhoto(photoId: number) {
@@ -1289,14 +1274,6 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  async function handleBookOrderStatusChange(id: number, status: string) {
-    const updated = await updateBookOrderStatus(id, status);
-    if (!updated) return;
-    setBookOrders((current) =>
-      current.map((order) => (order.id === id ? updated : order))
-    );
-  }
-
   async function handleHideReflection(id: number) {
     if (
       !window.confirm(
@@ -1310,6 +1287,219 @@ export default function ExperienceDetailPage() {
     setReflections((current) =>
       current.filter((reflection) => reflection.id !== id)
     );
+  }
+
+  function handleOpenRecommendationModal() {
+    setRecommendationError("");
+    setIsRecommendationModalOpen(true);
+  }
+
+  function handleCloseRecommendationModal() {
+    setIsRecommendationModalOpen(false);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setRecommendationError("");
+  }
+
+  function handleAddRecommendation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!recommendationName.trim() || !recommendationDescription.trim()) {
+      setRecommendationError("Name and description are required.");
+      return;
+    }
+
+    setRecommendationError("");
+
+    const newRecommendation = addRecommendation({
+      experienceId: params.id,
+      name: recommendationName.trim(),
+      category: recommendationCategory,
+      description: recommendationDescription.trim(),
+      link: recommendationLink.trim(),
+    });
+
+    setRecommendations((current) => [...current, newRecommendation]);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setIsRecommendationModalOpen(false);
+  }
+
+  function handleStartEditRecommendation(entry: Recommendation) {
+    setEditingRecommendationId(entry.id);
+    setRecommendationEditError("");
+    setRecommendationEditDraft({
+      name: entry.name,
+      category: entry.category,
+      description: entry.description,
+      link: entry.link,
+    });
+  }
+
+  function handleRecommendationEditDraftChange(field: string, value: string) {
+    setRecommendationEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditRecommendation() {
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleSaveEditRecommendation(entry: Recommendation) {
+    const draft = recommendationEditDraft;
+
+    if (!draft.name?.trim() || !draft.description?.trim()) {
+      setRecommendationEditError("Name and description are required.");
+      return;
+    }
+
+    const updatedEntry = updateRecommendation(entry.id, {
+      name: draft.name.trim(),
+      category: draft.category,
+      description: draft.description.trim(),
+      link: (draft.link ?? "").trim(),
+    });
+    if (updatedEntry) {
+      setRecommendations((current) =>
+        current.map((item) => (item.id === entry.id ? updatedEntry : item))
+      );
+    }
+
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleDeleteRecommendation(id: number) {
+    if (!window.confirm("Delete this recommendation?")) return;
+
+    deleteRecommendation(id);
+    setRecommendations((current) => current.filter((item) => item.id !== id));
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+    };
+  }, []);
+
+  function handleNoteChange(value: string) {
+    setNote(value);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveNote(params.id, value);
+      setShowSaved(true);
+
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+      savedIndicatorTimerRef.current = setTimeout(() => {
+        setShowSaved(false);
+      }, SAVED_INDICATOR_DURATION_MS);
+    }, NOTE_SAVE_DEBOUNCE_MS);
+  }
+
+  function handleOpenDeleteModal() {
+    // Reset explicitly on open (not just on close) so stale text can't
+    // possibly carry over from a previous open, however this modal got
+    // dismissed last time.
+    setDeleteConfirmationInput("");
+    setIsDeleteModalOpen(true);
+  }
+
+  function handleCloseDeleteModal() {
+    setIsDeleteModalOpen(false);
+    setDeleteConfirmationInput("");
+  }
+
+  async function handleConfirmDelete() {
+    if (!experience) return;
+
+    const matches =
+      deleteConfirmationInput.trim().toLowerCase() ===
+      experience.name.trim().toLowerCase();
+    if (!matches) return;
+
+    setIsDeleting(true);
+    sessionStorage.setItem("justDeleted", experience.name);
+    await deleteExperienceCompletely(params.id);
+    router.push("/experiences");
+  }
+
+  // Optimistic like the reflections toggle, but reverts if the save fails
+  // (updateExperience returns null on error).
+  async function handleToggleShowAttendeeCount() {
+    if (!experience) return;
+
+    const next = !experience.showAttendeeCount;
+    setExperience((current) =>
+      current ? { ...current, showAttendeeCount: next } : current
+    );
+    const updated = await updateExperience(experience.id, {
+      showAttendeeCount: next,
+    });
+    if (!updated) {
+      setExperience((current) =>
+        current ? { ...current, showAttendeeCount: !next } : current
+      );
+    }
+  }
+
+  function handleOpenThemeModal() {
+    setThemeDraft(experience?.theme ?? "editorial-classic");
+    setIsThemeModalOpen(true);
+  }
+
+  // Theme-only save (the full edit form isn't involved). The layout that
+  // paints data-theme reads the theme on route changes, so it's told about
+  // this in-place change via a window event.
+  async function handleSaveTheme() {
+    if (!experience) return;
+
+    setIsSavingTheme(true);
+    await updateExperience(Number(params.id), { theme: themeDraft });
+    setExperience((current) =>
+      current ? { ...current, theme: themeDraft } : current
+    );
+    window.dispatchEvent(
+      new CustomEvent("yhtbt:theme-changed", {
+        detail: { experienceId: params.id, theme: themeDraft },
+      })
+    );
+    setIsSavingTheme(false);
+    setIsThemeModalOpen(false);
+  }
+
+  async function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      const newUpdate = await addUpdate({
+        experienceId: params.id,
+        message: updateMessage,
+      });
+
+      setUpdates((current) => [newUpdate, ...current]);
+      setUpdateMessage("");
+      setUpdateError("");
+    } catch {
+      setUpdateError("Could not post this update. Please try again.");
+    }
+  }
+
+
+  async function handleDeleteItineraryItem(itemId: number) {
+    if (!window.confirm("Delete this item?")) return;
+
+    await deleteItineraryItem(itemId);
+    setItineraryItems((current) => current.filter((item) => item.id !== itemId));
   }
 
   async function handleAddGuest(event: FormEvent<HTMLFormElement>) {
@@ -1682,123 +1872,6 @@ export default function ExperienceDetailPage() {
     setTravelDetails((current) => current.filter((item) => item.id !== id));
   }
 
-  function handleOpenRecommendationModal() {
-    setRecommendationError("");
-    setIsRecommendationModalOpen(true);
-  }
-
-  function handleCloseRecommendationModal() {
-    setIsRecommendationModalOpen(false);
-    setRecommendationName("");
-    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
-    setRecommendationDescription("");
-    setRecommendationLink("");
-    setRecommendationError("");
-  }
-
-  function handleAddRecommendation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!recommendationName.trim() || !recommendationDescription.trim()) {
-      setRecommendationError("Name and description are required.");
-      return;
-    }
-
-    setRecommendationError("");
-
-    const newRecommendation = addRecommendation({
-      experienceId: params.id,
-      name: recommendationName.trim(),
-      category: recommendationCategory,
-      description: recommendationDescription.trim(),
-      link: recommendationLink.trim(),
-    });
-
-    setRecommendations((current) => [...current, newRecommendation]);
-    setRecommendationName("");
-    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
-    setRecommendationDescription("");
-    setRecommendationLink("");
-    setIsRecommendationModalOpen(false);
-  }
-
-  function handleStartEditRecommendation(entry: Recommendation) {
-    setEditingRecommendationId(entry.id);
-    setRecommendationEditError("");
-    setRecommendationEditDraft({
-      name: entry.name,
-      category: entry.category,
-      description: entry.description,
-      link: entry.link,
-    });
-  }
-
-  function handleRecommendationEditDraftChange(field: string, value: string) {
-    setRecommendationEditDraft((current) => ({ ...current, [field]: value }));
-  }
-
-  function handleCancelEditRecommendation() {
-    setEditingRecommendationId(null);
-    setRecommendationEditDraft({});
-    setRecommendationEditError("");
-  }
-
-  function handleSaveEditRecommendation(entry: Recommendation) {
-    const draft = recommendationEditDraft;
-
-    if (!draft.name?.trim() || !draft.description?.trim()) {
-      setRecommendationEditError("Name and description are required.");
-      return;
-    }
-
-    const updatedEntry = updateRecommendation(entry.id, {
-      name: draft.name.trim(),
-      category: draft.category,
-      description: draft.description.trim(),
-      link: (draft.link ?? "").trim(),
-    });
-    if (updatedEntry) {
-      setRecommendations((current) =>
-        current.map((item) => (item.id === entry.id ? updatedEntry : item))
-      );
-    }
-
-    setEditingRecommendationId(null);
-    setRecommendationEditDraft({});
-    setRecommendationEditError("");
-  }
-
-  function handleDeleteRecommendation(id: number) {
-    if (!window.confirm("Delete this recommendation?")) return;
-
-    deleteRecommendation(id);
-    setRecommendations((current) => current.filter((item) => item.id !== id));
-  }
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      if (savedIndicatorTimerRef.current)
-        clearTimeout(savedIndicatorTimerRef.current);
-    };
-  }, []);
-
-  function handleNoteChange(value: string) {
-    setNote(value);
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveNote(params.id, value);
-      setShowSaved(true);
-
-      if (savedIndicatorTimerRef.current)
-        clearTimeout(savedIndicatorTimerRef.current);
-      savedIndicatorTimerRef.current = setTimeout(() => {
-        setShowSaved(false);
-      }, SAVED_INDICATOR_DURATION_MS);
-    }, NOTE_SAVE_DEBOUNCE_MS);
-  }
-
   if (experience === undefined) {
     return null;
   }
@@ -1813,11 +1886,6 @@ export default function ExperienceDetailPage() {
     );
   }
 
-  // Trimmed and case-insensitive so stray whitespace or casing doesn't
-  // block an otherwise-correct confirmation.
-  const isDeleteConfirmationMatching =
-    deleteConfirmationInput.trim().toLowerCase() ===
-    experience.name.trim().toLowerCase();
 
   const groupedItinerary = groupByDate(itineraryItems);
 
@@ -1863,13 +1931,82 @@ export default function ExperienceDetailPage() {
     }
   }
 
+
   // Closed polls are hidden entirely from Preview as Guest (not just
   // marked closed) — a guest should never even know they existed. The
   // host's own view always sees every poll, open or closed, with a
   // status indicator instead (see the Polls section below).
-  const visiblePolls = isPreviewingAsGuest
+  const visiblePolls = isGuestView
     ? polls.filter((poll) => poll.isOpen)
     : polls;
+
+  // Trimmed and case-insensitive so stray whitespace or casing doesn't
+  // block an otherwise-correct confirmation.
+  const isDeleteConfirmationMatching =
+    deleteConfirmationInput.trim().toLowerCase() ===
+    experience.name.trim().toLowerCase();
+
+
+  // Recomputed on every render (never stored) — see computeExperiencePhase.
+  const phase = computeExperiencePhase(experience.startDate, experience.endDate);
+
+  // First tab in the phase's order that isn't hidden (e.g. During leads
+  // with Chat, which stays hidden until it's built).
+  function firstVisibleTab(forPhase: ExperiencePhase): ExperienceTabId {
+    return (
+      TAB_ORDER_FOR_DEFAULT[forPhase].find(
+        (tab) => hasContentByTab[tab] !== false
+      ) ?? "itinerary"
+    );
+  }
+
+  // Itinerary and Guests are always shown, empty or not. Updates hides
+  // whenever there are zero updates, in host view too. Tabs not migrated
+  // yet stay visible via the tab bar's default.
+  // Hide-when-empty applies to the guest view only. A host always keeps
+  // every tab reachable, empty or not, so they can add the first item
+  // (each section shows its own "No X yet" state plus its Add control);
+  // a guest has nothing to do in an empty section, so it's hidden there.
+  // Tabs not migrated yet (Chat) stay visible via the tab bar's default.
+  const hasContentByTab: Partial<Record<ExperienceTabId, boolean>> = {
+    // Chat isn't built yet: hidden in every phase, no placeholder, until
+    // the real feature exists and has content to show.
+    chat: false,
+    itinerary: !isGuestView || itineraryItems.length > 0,
+    // A guest only ever sees currently-confirmed guests, so that's what
+    // counts as content for them.
+    guests:
+      !isGuestView ||
+      guests.some((guest) => guest.rsvpStatus === "confirmed"),
+    updates: !isGuestView || updates.length > 0,
+    // A guest's poll count excludes closed polls, matching what they see.
+    details:
+      !isGuestView ||
+      recommendations.length > 0 ||
+      faqs.length > 0 ||
+      visiblePolls.length > 0,
+    // Reflections only count for a guest when they're enabled and visible.
+    photos:
+      !isGuestView ||
+      photos.length > 0 ||
+      (experience.reflectionsEnabled &&
+        reflections.some((reflection) => !reflection.hidden)),
+    // Private to the host, as on the real page — no content check, just
+    // host-only.
+    notes: !isGuestView,
+    // Host-only regardless of content: Delete Experience and the
+    // Preview-as-Guest toggle always exist for a host, so it's never
+    // empty for them.
+    hostTools: !isGuestView,
+  };
+
+  // Falls back to the phase's first visible tab when nothing has been
+  // picked yet, or when the picked tab just disappeared (e.g. switching to
+  // guest preview while on a host-only tab).
+  const resolvedActiveTab: ExperienceTabId =
+    activeTab && hasContentByTab[activeTab] !== false
+      ? activeTab
+      : firstVisibleTab(phase);
 
   return (
     <>
@@ -1919,29 +2056,34 @@ export default function ExperienceDetailPage() {
           YHTBT
         </Link>
 
-        <div className="mt-3 flex items-center gap-3">
-          <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
-            {isPreviewingAsGuest ? "Previewing as: Guest" : "Host View"}
-          </span>
-          <button
-            type="button"
-            onClick={() => setIsPreviewingAsGuest((current) => !current)}
-            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-          >
-            {isPreviewingAsGuest ? "Switch to Host View" : "Preview as Guest"}
-          </button>
-        </div>
+        {/* The exit control lives here (not in Host Tools) because Host
+            Tools doesn't exist while previewing as a guest — this header
+            is the only thing visible on every tab in both views. */}
+        {isGuestView ? (
+          <div className="mt-3 flex items-center gap-3">
+            <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
+              Previewing as: Guest
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsPreviewingAsGuest(false)}
+              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+            >
+              Switch to Host View
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-baseline gap-3">
           <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
             {experience.name}
           </h1>
-          {isPreviewingAsGuest ? null : (
+          {isGuestView ? null : (
             <Link
               href={`/experiences/${params.id}/edit`}
               className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
             >
-              Edit
+              Edit Experience
             </Link>
           )}
         </div>
@@ -1950,6 +2092,18 @@ export default function ExperienceDetailPage() {
           {experience.location ? ` · ${experience.location}` : ""}
         </p>
       </div>
+
+      <div className="mt-8">
+        <ExperienceTabBar
+          phase={phase}
+          activeTab={resolvedActiveTab}
+          onChange={setActiveTab}
+          hasContentByTab={hasContentByTab}
+        />
+      </div>
+
+      {resolvedActiveTab === "itinerary" ? (
+        <>
 
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
@@ -1966,7 +2120,7 @@ export default function ExperienceDetailPage() {
 
       {collapsedSections.itinerary ? null : (
         <>
-          {isPreviewingAsGuest ? null : (
+          {isGuestView ? null : (
           <div className="mt-6 flex justify-end">
             <Link
               href={`/experiences/${params.id}/itinerary/new`}
@@ -2049,7 +2203,7 @@ export default function ExperienceDetailPage() {
                           Dress code: {item.dressCode}
                         </p>
                       ) : null}
-                      {isPreviewingAsGuest ? null : (
+                      {isGuestView ? null : (
                       <div className="mt-2 ml-6 flex items-center gap-3">
                         <Link
                           href={`/experiences/${params.id}/itinerary/${item.id}/edit`}
@@ -2110,510 +2264,9 @@ export default function ExperienceDetailPage() {
         </>
       )}
 
-      {updates.length > 0 || !isPreviewingAsGuest ? (
-      <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">
-          <button
-            type="button"
-            onClick={() => toggleSection("updates")}
-            className="flex items-center gap-2 text-left"
-          >
-            <ChevronIcon collapsed={!!collapsedSections.updates} />
-            Updates
-          </button>
-        </h2>
-
-        {collapsedSections.updates ? null : (
-          <>
-            {isPreviewingAsGuest ? null : (
-            <form
-              onSubmit={handleAddUpdate}
-              className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end"
-            >
-              <label className="block flex-1">
-                <span className="text-sm tracking-wide text-muted uppercase">
-                  New Update
-                </span>
-                <input
-                  type="text"
-                  required
-                  value={updateMessage}
-                  onChange={(event) => setUpdateMessage(event.target.value)}
-                  placeholder="The dinner start time moved to 7pm..."
-                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="shrink-0 border border-accent px-6 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-              >
-                Post
-              </button>
-            </form>
-            )}
-
-            {updateError ? (
-              <p className="mt-2 text-sm text-red-600">{updateError}</p>
-            ) : null}
-
-            {updates.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
-                No updates yet
-              </div>
-            ) : (
-              <div className="mt-10 flex flex-col gap-8">
-                {updates.map((update) => (
-                  <div
-                    key={update.id}
-                    className="border-b border-foreground/10 pb-8 last:border-b-0"
-                  >
-                    <p className="font-serif text-lg text-foreground">
-                      {update.message}
-                    </p>
-                    <p className="mt-1 text-sm text-foreground/60">
-                      {formatRelativeTime(update.timestamp)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      ) : null}
-
-      {faqs.length > 0 || !isPreviewingAsGuest ? (
-      <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">
-          <button
-            type="button"
-            onClick={() => toggleSection("faqs")}
-            className="flex items-center gap-2 text-left"
-          >
-            <ChevronIcon collapsed={!!collapsedSections.faqs} />
-            FAQs
-          </button>
-        </h2>
-
-        {collapsedSections.faqs ? null : (
-          <>
-            {isPreviewingAsGuest ? null : (
-            <div className="mt-6 flex justify-end gap-4">
-              <button
-                type="button"
-                onClick={handleOpenSuggestFaqsModal}
-                className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-              >
-                Suggest FAQs
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsFaqModalOpen(true)}
-                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-              >
-                Add FAQ
-              </button>
-            </div>
-            )}
-
-            <Modal
-              isOpen={isFaqModalOpen}
-              onClose={handleCloseFaqModal}
-              title="Add FAQ"
-            >
-              <form
-                onSubmit={handleAddFaq}
-                className="flex flex-col gap-6"
-              >
-                <label className="block">
-                  <span className="text-sm tracking-wide text-muted uppercase">
-                    Question
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={faqQuestion}
-                    onChange={(event) => setFaqQuestion(event.target.value)}
-                    placeholder="Is there parking on site?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm tracking-wide text-muted uppercase">
-                    Answer
-                  </span>
-                  <textarea
-                    required
-                    rows={3}
-                    value={faqAnswer}
-                    onChange={(event) => setFaqAnswer(event.target.value)}
-                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                  />
-                </label>
-
-                {faqAddError ? (
-                  <p className="text-sm text-red-600">{faqAddError}</p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-                >
-                  Add FAQ
-                </button>
-              </form>
-            </Modal>
-
-            <Modal
-              isOpen={isSuggestFaqsModalOpen}
-              onClose={handleCloseSuggestFaqsModal}
-              title="Suggest FAQs"
-            >
-              <div className="flex flex-col gap-6">
-                <p className="text-sm text-muted">
-                  Based on this Experience&apos;s type
-                  {experience.experienceType
-                    ? ` (${experience.experienceType})`
-                    : ""}
-                  , here are some commonly asked questions. Selected ones
-                  are added as drafts with the question pre-filled — fill
-                  in (or tweak) the wording afterward.
-                </p>
-
-                <div className="flex flex-col gap-3">
-                  {getSuggestedFaqQuestions(experience.experienceType ?? "").map(
-                    (question: string) => (
-                      <label
-                        key={question}
-                        className="flex items-start gap-3"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedSuggestedQuestions.includes(
-                            question
-                          )}
-                          onChange={() =>
-                            handleToggleSuggestedQuestion(question)
-                          }
-                          className="mt-1 h-4 w-4 accent-accent"
-                        />
-                        <span className="font-serif text-lg text-foreground">
-                          {question}
-                        </span>
-                      </label>
-                    )
-                  )}
-                </div>
-
-                {faqAddError ? (
-                  <p className="text-sm text-red-600">{faqAddError}</p>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={handleAddSelectedSuggestedFaqs}
-                  disabled={selectedSuggestedQuestions.length === 0}
-                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Add Selected
-                </button>
-              </div>
-            </Modal>
-
-            {faqs.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
-                No FAQs yet
-              </div>
-            ) : (
-              <div className="mt-10 flex flex-col gap-8">
-                {faqs.map((faq) => {
-                  if (editingFaqId === faq.id) {
-                    const draft = faqEditDraft;
-                    return (
-                      <div
-                        key={faq.id}
-                        className="flex flex-col gap-6 border border-foreground/10 p-4"
-                      >
-                        <label className="block">
-                          <span className="text-sm tracking-wide text-muted uppercase">
-                            Question
-                          </span>
-                          <input
-                            type="text"
-                            required
-                            value={draft.question ?? ""}
-                            onChange={(event) =>
-                              handleFaqEditDraftChange(
-                                "question",
-                                event.target.value
-                              )
-                            }
-                            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                          />
-                        </label>
-
-                        <label className="block">
-                          <span className="text-sm tracking-wide text-muted uppercase">
-                            Answer
-                          </span>
-                          <textarea
-                            rows={3}
-                            value={draft.answer ?? ""}
-                            onChange={(event) =>
-                              handleFaqEditDraftChange(
-                                "answer",
-                                event.target.value
-                              )
-                            }
-                            className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                          />
-                        </label>
-
-                        {faqEditError ? (
-                          <p className="text-sm text-red-600">{faqEditError}</p>
-                        ) : null}
-
-                        <div className="flex gap-4">
-                          <button
-                            type="button"
-                            onClick={() => handleSaveEditFaq(faq)}
-                            className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleCancelEditFaq}
-                            className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                  <div
-                    key={faq.id}
-                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-8 last:border-b-0"
-                  >
-                    <div>
-                      <p className="font-serif text-lg text-foreground">
-                        {faq.question}
-                      </p>
-                      <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
-                        {faq.answer || (
-                          <span className="italic">No answer yet</span>
-                        )}
-                      </p>
-                    </div>
-                    {isPreviewingAsGuest ? null : (
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditFaq(faq)}
-                        className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                      >
-                        Edit
-                      </button>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      ) : null}
-
-      {visiblePolls.length > 0 || !isPreviewingAsGuest ? (
-      <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">
-          <button
-            type="button"
-            onClick={() => toggleSection("polls")}
-            className="flex items-center gap-2 text-left"
-          >
-            <ChevronIcon collapsed={!!collapsedSections.polls} />
-            Polls
-          </button>
-        </h2>
-
-        {collapsedSections.polls ? null : (
-          <>
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsPollModalOpen(true)}
-                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-              >
-                Add Poll
-              </button>
-            </div>
-
-            <Modal
-              isOpen={isPollModalOpen}
-              onClose={handleClosePollModal}
-              title="Add Poll"
-            >
-              <form onSubmit={handleAddPoll} className="flex flex-col gap-6">
-                <label className="block">
-                  <span className="text-sm tracking-wide text-muted uppercase">
-                    Question
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    value={pollQuestion}
-                    onChange={(event) => setPollQuestion(event.target.value)}
-                    placeholder="Where should we go for the group dinner?"
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                  />
-                </label>
-
-                <div className="flex flex-col gap-4">
-                  <span className="text-sm tracking-wide text-muted uppercase">
-                    Options
-                  </span>
-                  {pollOptions.map((option, index) => (
-                    <input
-                      key={index}
-                      type="text"
-                      required
-                      value={option}
-                      onChange={(event) =>
-                        handlePollOptionChange(index, event.target.value)
-                      }
-                      placeholder={`Option ${index + 1}`}
-                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                    />
-                  ))}
-
-                  {pollOptions.length < MAX_POLL_OPTIONS ? (
-                    <button
-                      type="button"
-                      onClick={handleAddPollOption}
-                      className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                    >
-                      + Add another option
-                    </button>
-                  ) : null}
-                </div>
-
-                {pollError ? (
-                  <p className="text-sm text-red-600">{pollError}</p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
-                >
-                  Add Poll
-                </button>
-              </form>
-            </Modal>
-
-            {visiblePolls.length === 0 ? (
-              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
-                No polls yet
-              </div>
-            ) : (
-              <div className="mt-10 flex flex-col gap-8">
-                {visiblePolls.map((poll) => {
-                  const hasVoted = votedPollIds.includes(poll.id);
-                  const totalVotes = Object.values(poll.votes).reduce(
-                    (sum, count) => sum + count,
-                    0
-                  );
-
-                  return (
-                    <div
-                      key={poll.id}
-                      className="border-b border-foreground/10 pb-8 last:border-b-0"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <p className="font-serif text-lg text-foreground">
-                          {poll.question}
-                          {!poll.isOpen ? (
-                            <span className="ml-2 inline-block border border-foreground/10 px-2 py-0.5 align-middle text-xs tracking-wide text-muted uppercase">
-                              Closed
-                            </span>
-                          ) : null}
-                        </p>
-                        {isPreviewingAsGuest ? null : (
-                          <div className="flex shrink-0 items-center gap-4">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleTogglePollOpen(poll.id, !poll.isOpen)
-                              }
-                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                            >
-                              {poll.isOpen ? "Close Poll" : "Reopen Poll"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePoll(poll.id)}
-                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-red-600"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-4 flex flex-col gap-3">
-                        {poll.options.map((option) => {
-                          const count = poll.votes[option] ?? 0;
-                          const percentage =
-                            totalVotes === 0
-                              ? 0
-                              : Math.round((count / totalVotes) * 100);
-
-                          if (!hasVoted) {
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={() => handleVote(poll.id, option)}
-                                className="border border-foreground/10 px-4 py-3 text-left font-serif text-lg text-foreground transition-colors hover:border-accent hover:text-accent"
-                              >
-                                {option}
-                              </button>
-                            );
-                          }
-
-                          return (
-                            <div key={option}>
-                              <div className="flex items-center justify-between gap-4">
-                                <span className="font-serif text-lg text-foreground">
-                                  {option}
-                                </span>
-                                <span className="shrink-0 text-sm text-foreground/60">
-                                  {count} ({percentage}%)
-                                </span>
-                              </div>
-                              <div className="mt-1 h-2 w-full bg-foreground/10">
-                                <div
-                                  className="h-2 bg-accent"
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      ) : null}
+        </>
+      ) : resolvedActiveTab === "guests" ? (
+        <>
 
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
@@ -2623,13 +2276,16 @@ export default function ExperienceDetailPage() {
             className="flex items-center gap-2 text-left"
           >
             <ChevronIcon collapsed={!!collapsedSections.guests} />
-            Guests
+            {isGuestView ? "Confirmed Attendees" : "Guests"}
+            {isGuestView && experience.showAttendeeCount
+              ? ` (${guests.filter((guest) => guest.rsvpStatus === "confirmed").length})`
+              : ""}
           </button>
         </h2>
 
         {collapsedSections.guests ? null : (
         <>
-        {isPreviewingAsGuest ? null : (
+        {isGuestView ? null : (
         <div className="mt-6 flex flex-wrap items-center justify-end gap-4">
           <button
             type="button"
@@ -2744,7 +2400,7 @@ export default function ExperienceDetailPage() {
           </div>
         </Modal>
 
-        {isPreviewingAsGuest ? null : (
+        {isGuestView ? null : (
         <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 border-b border-foreground/10">
           {GUEST_TABS.map((tab) => {
             const isActive = tab.status === guestTab;
@@ -2774,18 +2430,21 @@ export default function ExperienceDetailPage() {
         )}
 
         {(() => {
-          const effectiveGuestTab = isPreviewingAsGuest
+          const effectiveGuestTab = isGuestView
             ? "directory"
             : guestTab;
 
           if (effectiveGuestTab === "directory") {
             // "directory" isn't a selectable tab anymore (Attendee
             // Directory was removed from GUEST_TABS) — it's only reached
-            // via isPreviewingAsGuest above, so it needs its own message
+            // via isGuestView above, so it needs its own message
             // rather than looking one up in GUEST_TABS, where it will
             // never find a match.
+            // Strictly current RSVP == confirmed (not everConfirmed): someone
+            // who confirmed and later declined must not show up here, or a
+            // guest could infer that person's RSVP change.
             const confirmedGuests = guests.filter(
-              (guest) => guest.everConfirmed
+              (guest) => guest.rsvpStatus === "confirmed"
             );
 
             return confirmedGuests.length === 0 ? (
@@ -2860,7 +2519,8 @@ export default function ExperienceDetailPage() {
         )}
       </div>
 
-      {travelDetails.length > 0 || !isPreviewingAsGuest ? (
+
+      {travelDetails.length > 0 || !isGuestView ? (
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
           <button
@@ -2875,7 +2535,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.travelDetails ? null : (
         <>
-        {isPreviewingAsGuest ? null : (
+        {isGuestView ? null : (
         <div className="mt-6 flex justify-end">
           <button
             type="button"
@@ -3571,7 +3231,7 @@ export default function ExperienceDetailPage() {
                               {formatSingleDate(entry.arrivalDate)} at{" "}
                               {formatTime(entry.arrivalTime)}
                             </p>
-                            {isPreviewingAsGuest ? null : (
+                            {isGuestView ? null : (
                             <div className="flex shrink-0 items-center gap-3">
                               <button
                                 type="button"
@@ -3622,7 +3282,7 @@ export default function ExperienceDetailPage() {
                                   : ""}
                               </p>
                             </div>
-                            {isPreviewingAsGuest ? null : (
+                            {isGuestView ? null : (
                             <div className="flex shrink-0 items-center gap-3">
                               <button
                                 type="button"
@@ -3664,7 +3324,7 @@ export default function ExperienceDetailPage() {
                               </p>
                             ) : null}
                           </div>
-                          {isPreviewingAsGuest ? null : (
+                          {isGuestView ? null : (
                           <div className="flex shrink-0 items-center gap-3">
                             <button
                               type="button"
@@ -3696,7 +3356,519 @@ export default function ExperienceDetailPage() {
       </div>
       ) : null}
 
-      {recommendations.length > 0 || !isPreviewingAsGuest ? (
+        </>
+      ) : resolvedActiveTab === "updates" ? (
+        <>
+
+      {updates.length > 0 || !isGuestView ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("updates")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.updates} />
+            Updates
+          </button>
+        </h2>
+
+        {collapsedSections.updates ? null : (
+          <>
+            {isGuestView ? null : (
+            <form
+              onSubmit={handleAddUpdate}
+              className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end"
+            >
+              <label className="block flex-1">
+                <span className="text-sm tracking-wide text-muted uppercase">
+                  New Update
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={updateMessage}
+                  onChange={(event) => setUpdateMessage(event.target.value)}
+                  placeholder="The dinner start time moved to 7pm..."
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="shrink-0 border border-accent px-6 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Post
+              </button>
+            </form>
+            )}
+
+            {updateError ? (
+              <p className="mt-2 text-sm text-red-600">{updateError}</p>
+            ) : null}
+
+            {updates.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No updates yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {updates.map((update) => (
+                  <div
+                    key={update.id}
+                    className="border-b border-foreground/10 pb-8 last:border-b-0"
+                  >
+                    <p className="font-serif text-lg text-foreground">
+                      {update.message}
+                    </p>
+                    <p className="mt-1 text-sm text-foreground/60">
+                      {formatRelativeTime(update.timestamp)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      ) : null}
+
+        </>
+      ) : resolvedActiveTab === "details" ? (
+        <>
+      {faqs.length > 0 || !isGuestView ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("faqs")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.faqs} />
+            FAQs
+          </button>
+        </h2>
+
+        {collapsedSections.faqs ? null : (
+          <>
+            {isGuestView ? null : (
+            <div className="mt-6 flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={handleOpenSuggestFaqsModal}
+                className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+              >
+                Suggest FAQs
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFaqModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add FAQ
+              </button>
+            </div>
+            )}
+
+            <Modal
+              isOpen={isFaqModalOpen}
+              onClose={handleCloseFaqModal}
+              title="Add FAQ"
+            >
+              <form
+                onSubmit={handleAddFaq}
+                className="flex flex-col gap-6"
+              >
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={faqQuestion}
+                    onChange={(event) => setFaqQuestion(event.target.value)}
+                    placeholder="Is there parking on site?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Answer
+                  </span>
+                  <textarea
+                    required
+                    rows={3}
+                    value={faqAnswer}
+                    onChange={(event) => setFaqAnswer(event.target.value)}
+                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add FAQ
+                </button>
+              </form>
+            </Modal>
+
+            <Modal
+              isOpen={isSuggestFaqsModalOpen}
+              onClose={handleCloseSuggestFaqsModal}
+              title="Suggest FAQs"
+            >
+              <div className="flex flex-col gap-6">
+                <p className="text-sm text-muted">
+                  Based on this Experience&apos;s type
+                  {experience.experienceType
+                    ? ` (${experience.experienceType})`
+                    : ""}
+                  , here are some commonly asked questions. Selected ones
+                  are added as drafts with the question pre-filled — fill
+                  in (or tweak) the wording afterward.
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  {getSuggestedFaqQuestions(experience.experienceType ?? "").map(
+                    (question: string) => (
+                      <label
+                        key={question}
+                        className="flex items-start gap-3"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSuggestedQuestions.includes(
+                            question
+                          )}
+                          onChange={() =>
+                            handleToggleSuggestedQuestion(question)
+                          }
+                          className="mt-1 h-4 w-4 accent-accent"
+                        />
+                        <span className="font-serif text-lg text-foreground">
+                          {question}
+                        </span>
+                      </label>
+                    )
+                  )}
+                </div>
+
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={handleAddSelectedSuggestedFaqs}
+                  disabled={selectedSuggestedQuestions.length === 0}
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add Selected
+                </button>
+              </div>
+            </Modal>
+
+            {faqs.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No FAQs yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {faqs.map((faq) => {
+                  if (editingFaqId === faq.id) {
+                    const draft = faqEditDraft;
+                    return (
+                      <div
+                        key={faq.id}
+                        className="flex flex-col gap-6 border border-foreground/10 p-4"
+                      >
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Question
+                          </span>
+                          <input
+                            type="text"
+                            required
+                            value={draft.question ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "question",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Answer
+                          </span>
+                          <textarea
+                            rows={3}
+                            value={draft.answer ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "answer",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        {faqEditError ? (
+                          <p className="text-sm text-red-600">{faqEditError}</p>
+                        ) : null}
+
+                        <div className="flex gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditFaq(faq)}
+                            className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditFaq}
+                            className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                  <div
+                    key={faq.id}
+                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-8 last:border-b-0"
+                  >
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {faq.question}
+                      </p>
+                      <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
+                        {faq.answer || (
+                          <span className="italic">No answer yet</span>
+                        )}
+                      </p>
+                    </div>
+                    {isGuestView ? null : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditFaq(faq)}
+                        className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      ) : null}
+
+      {visiblePolls.length > 0 || !isGuestView ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("polls")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.polls} />
+            Polls
+          </button>
+        </h2>
+
+        {collapsedSections.polls ? null : (
+          <>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsPollModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add Poll
+              </button>
+            </div>
+
+            <Modal
+              isOpen={isPollModalOpen}
+              onClose={handleClosePollModal}
+              title="Add Poll"
+            >
+              <form onSubmit={handleAddPoll} className="flex flex-col gap-6">
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={pollQuestion}
+                    onChange={(event) => setPollQuestion(event.target.value)}
+                    placeholder="Where should we go for the group dinner?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <div className="flex flex-col gap-4">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Options
+                  </span>
+                  {pollOptions.map((option, index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      required
+                      value={option}
+                      onChange={(event) =>
+                        handlePollOptionChange(index, event.target.value)
+                      }
+                      placeholder={`Option ${index + 1}`}
+                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                    />
+                  ))}
+
+                  {pollOptions.length < MAX_POLL_OPTIONS ? (
+                    <button
+                      type="button"
+                      onClick={handleAddPollOption}
+                      className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      + Add another option
+                    </button>
+                  ) : null}
+                </div>
+
+                {pollError ? (
+                  <p className="text-sm text-red-600">{pollError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add Poll
+                </button>
+              </form>
+            </Modal>
+
+            {visiblePolls.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No polls yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {visiblePolls.map((poll) => {
+                  const hasVoted = votedPollIds.includes(poll.id);
+                  const totalVotes = Object.values(poll.votes).reduce(
+                    (sum, count) => sum + count,
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={poll.id}
+                      className="border-b border-foreground/10 pb-8 last:border-b-0"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <p className="font-serif text-lg text-foreground">
+                          {poll.question}
+                          {!poll.isOpen ? (
+                            <span className="ml-2 inline-block border border-foreground/10 px-2 py-0.5 align-middle text-xs tracking-wide text-muted uppercase">
+                              Closed
+                            </span>
+                          ) : null}
+                        </p>
+                        {isGuestView ? null : (
+                          <div className="flex shrink-0 items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleTogglePollOpen(poll.id, !poll.isOpen)
+                              }
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              {poll.isOpen ? "Close Poll" : "Reopen Poll"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoll(poll.id)}
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 flex flex-col gap-3">
+                        {poll.options.map((option) => {
+                          const count = poll.votes[option] ?? 0;
+                          const percentage =
+                            totalVotes === 0
+                              ? 0
+                              : Math.round((count / totalVotes) * 100);
+
+                          if (!hasVoted) {
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => handleVote(poll.id, option)}
+                                className="border border-foreground/10 px-4 py-3 text-left font-serif text-lg text-foreground transition-colors hover:border-accent hover:text-accent"
+                              >
+                                {option}
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <div key={option}>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="font-serif text-lg text-foreground">
+                                  {option}
+                                </span>
+                                <span className="shrink-0 text-sm text-foreground/60">
+                                  {count} ({percentage}%)
+                                </span>
+                              </div>
+                              <div className="mt-1 h-2 w-full bg-foreground/10">
+                                <div
+                                  className="h-2 bg-accent"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      ) : null}
+
+      {recommendations.length > 0 || !isGuestView ? (
       <div className="mt-12">
         <h2 className="font-serif text-2xl text-foreground">
           <button
@@ -3711,7 +3883,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.recommendations ? null : (
         <>
-        {isPreviewingAsGuest ? null : (
+        {isGuestView ? null : (
         <div className="mt-6 flex justify-end">
           <button
             type="button"
@@ -3948,7 +4120,7 @@ export default function ExperienceDetailPage() {
                         </a>
                       ) : null}
                     </div>
-                    {isPreviewingAsGuest ? null : (
+                    {isGuestView ? null : (
                       <div className="flex shrink-0 items-center gap-3">
                         <button
                           type="button"
@@ -3975,66 +4147,9 @@ export default function ExperienceDetailPage() {
         )}
       </div>
       ) : null}
-
-      {!isPreviewingAsGuest && bookOrders.length > 0 ? (
-      <div className="mt-12">
-        <h2 className="font-serif text-2xl text-foreground">
-          <button
-            type="button"
-            onClick={() => toggleSection("bookOrders")}
-            className="flex items-center gap-2 text-left"
-          >
-            <ChevronIcon collapsed={!!collapsedSections.bookOrders} />
-            Book Orders
-          </button>
-        </h2>
-
-        {collapsedSections.bookOrders ? null : (
-          <div className="mt-6 flex flex-col gap-8">
-            {bookOrders.map((order) => (
-              <div
-                key={order.id}
-                className="border-b border-foreground/10 pb-8 last:border-b-0"
-              >
-                <p className="font-serif text-lg text-foreground">
-                  {order.recipientName}
-                </p>
-                <p className="mt-1 text-sm text-foreground/60">
-                  {order.shippingAddress.line1}
-                  {order.shippingAddress.line2
-                    ? `, ${order.shippingAddress.line2}`
-                    : ""}
-                  <br />
-                  {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
-                  {order.shippingAddress.zip}
-                  <br />
-                  {order.shippingAddress.country}
-                </p>
-                <label className="mt-4 block max-w-xs">
-                  <span className="text-sm tracking-wide text-muted uppercase">
-                    Status
-                  </span>
-                  <select
-                    value={order.status}
-                    onChange={(event) =>
-                      handleBookOrderStatusChange(order.id, event.target.value)
-                    }
-                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
-                  >
-                    {BOOK_ORDER_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      ) : null}
-
+        </>
+      ) : resolvedActiveTab === "photos" ? (
+        <>
       <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">
           <button
@@ -4064,7 +4179,7 @@ export default function ExperienceDetailPage() {
 
         {collapsedSections.photos ? null : (
           <>
-            {isPreviewingAsGuest ? null : (
+            {isGuestView ? null : (
               <div className="mt-6">
                 <label className="inline-block border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
                   Upload Photo
@@ -4078,7 +4193,7 @@ export default function ExperienceDetailPage() {
               </div>
             )}
 
-            {isPreviewingAsGuest || !photoUploadError ? null : (
+            {isGuestView || !photoUploadError ? null : (
               <p className="mt-3 text-sm text-red-600">{photoUploadError}</p>
             )}
 
@@ -4274,7 +4389,7 @@ export default function ExperienceDetailPage() {
               Reflections
             </button>
           </h2>
-          {isPreviewingAsGuest ? null : (
+          {isGuestView ? null : (
             <button
               type="button"
               onClick={handleToggleReflectionsEnabled}
@@ -4491,7 +4606,7 @@ export default function ExperienceDetailPage() {
                       canEdit={myReflectionIds.includes(reflection.id)}
                       onEdit={handleOpenEditReflectionModal}
                       onDelete={
-                        isPreviewingAsGuest ? undefined : handleHideReflection
+                        isGuestView ? undefined : handleHideReflection
                       }
                     />
                   </div>
@@ -4506,7 +4621,7 @@ export default function ExperienceDetailPage() {
           </>
         )}
       </div>
-      ) : !isPreviewingAsGuest ? (
+      ) : !isGuestView ? (
         <div className="mt-12 flex items-center gap-3">
           <p className="text-sm text-muted">Reflections aren&apos;t open yet</p>
           <button
@@ -4518,8 +4633,10 @@ export default function ExperienceDetailPage() {
           </button>
         </div>
       ) : null}
-
-      {!isPreviewingAsGuest && (
+        </>
+      ) : resolvedActiveTab === "notes" ? (
+        <>
+      {!isGuestView && (
       <>
       <div className="mt-12 flex items-center justify-between gap-4">
         <h2 className="font-serif text-2xl text-foreground">
@@ -4562,18 +4679,129 @@ export default function ExperienceDetailPage() {
       )}
       </>
       )}
+        </>
+      ) : resolvedActiveTab === "hostTools" ? (
+        <>
+        <div className="mt-8 divide-y divide-foreground/10 border-y border-foreground/10">
+          <button
+            type="button"
+            onClick={() => setIsPreviewingAsGuest((current) => !current)}
+            className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+          >
+            {isGuestView ? "Switch to Host View" : "Preview as Guest"}
+          </button>
 
-      {isPreviewingAsGuest ? null : (
-        <div className="mt-24 border-t border-foreground/10 pt-8">
+          <button
+            type="button"
+            onClick={handleOpenThemeModal}
+            className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+          >
+            Change theme
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleShowAttendeeCount}
+            aria-pressed={!!experience.showAttendeeCount}
+            className="flex w-full items-center justify-between gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+          >
+            Show attendee count to guests
+            <span className="text-xs tracking-widest text-accent uppercase">
+              {experience.showAttendeeCount ? "On" : "Off"}
+            </span>
+          </button>
+
+          {bookOrders.length > 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("bookOrders")}
+                className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
+              >
+                <ChevronIcon collapsed={!!collapsedSections.bookOrders} />
+                Book Orders ({bookOrders.length})
+              </button>
+              {collapsedSections.bookOrders ? null : (
+                <div className="pb-6">
+          <div className="mt-6 flex flex-col gap-8">
+            {bookOrders.map((order) => (
+              <div
+                key={order.id}
+                className="border-b border-foreground/10 pb-8 last:border-b-0"
+              >
+                <p className="font-serif text-lg text-foreground">
+                  {order.recipientName}
+                </p>
+                <p className="mt-1 text-sm text-foreground/60">
+                  {order.shippingAddress.line1}
+                  {order.shippingAddress.line2
+                    ? `, ${order.shippingAddress.line2}`
+                    : ""}
+                  <br />
+                  {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
+                  {order.shippingAddress.zip}
+                  <br />
+                  {order.shippingAddress.country}
+                </p>
+                <label className="mt-4 block max-w-xs">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Status
+                  </span>
+                  <select
+                    value={order.status}
+                    onChange={(event) =>
+                      handleBookOrderStatusChange(order.id, event.target.value)
+                    }
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                  >
+                    {BOOK_ORDER_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ))}
+          </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={handleOpenDeleteModal}
-            className="text-sm text-red-600/70 underline underline-offset-2 transition-colors hover:text-red-600"
+            className="flex w-full items-center py-4 text-left text-sm tracking-wide text-red-600/70 transition-colors hover:text-red-600"
           >
             Delete Experience
           </button>
         </div>
-      )}
+
+      <Modal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        title="Change Theme"
+      >
+        <ThemePicker value={themeDraft} onChange={setThemeDraft} />
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleSaveTheme}
+            disabled={isSavingTheme}
+            className="border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSavingTheme ? "Saving…" : "Save Theme"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsThemeModalOpen(false)}
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={isDeleteModalOpen}
@@ -4630,6 +4858,8 @@ export default function ExperienceDetailPage() {
           </button>
         </div>
       </Modal>
+        </>
+      ) : null}
       </main>
     </>
   );

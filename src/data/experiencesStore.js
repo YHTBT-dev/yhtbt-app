@@ -46,6 +46,7 @@ function rowToExperience(row) {
     location: row.location ?? "",
     theme: row.theme ?? "editorial-classic",
     reflectionsEnabled: row.reflections_enabled ?? false,
+    showAttendeeCount: row.show_attendee_count ?? false,
     roles: row.roles ?? [],
     paid: row.paid ?? false,
     estimatedGuestCount: row.estimated_guest_count ?? null,
@@ -68,6 +69,8 @@ function experienceToRow(experience) {
   if (experience.theme !== undefined) row.theme = experience.theme;
   if (experience.reflectionsEnabled !== undefined)
     row.reflections_enabled = experience.reflectionsEnabled;
+  if (experience.showAttendeeCount !== undefined)
+    row.show_attendee_count = experience.showAttendeeCount;
   if (experience.roles !== undefined) row.roles = experience.roles;
   if (experience.paid !== undefined) row.paid = experience.paid;
   if (experience.estimatedGuestCount !== undefined)
@@ -142,7 +145,15 @@ export async function updateExperience(id, fields) {
     .single();
 
   if (error) {
-    console.error("[experiencesStore] updateExperience failed:", error);
+    // Supabase/PostgREST errors are class instances whose fields don't
+    // enumerate, so logging the raw object shows "{}" — spell them out.
+    console.error("[experiencesStore] updateExperience failed:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      fields: Object.keys(fields),
+    });
     return null;
   }
   return rowToExperience(data);
