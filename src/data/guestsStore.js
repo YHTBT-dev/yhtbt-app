@@ -149,13 +149,25 @@ export async function updateGuest(id, fields) {
   return rowToGuest(data);
 }
 
+// Hard delete of the guest row (and with it their RSVP status). Nothing
+// else references a guest by id: photo tags, reflection tags, and travel
+// detail guest names are all saved as plain name text, so they simply
+// keep showing that saved name afterward. Returns true on success so the
+// caller only drops the guest from the UI once the row is really gone.
 export async function deleteGuest(id) {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from(TABLE_NAME).delete().eq("id", id);
 
   if (error) {
-    console.error("[guestsStore] deleteGuest failed:", error);
+    console.error("[guestsStore] deleteGuest failed:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return false;
   }
+  return true;
 }
 
 // Used by the guest-facing RSVP page, which only has a typed name (and,

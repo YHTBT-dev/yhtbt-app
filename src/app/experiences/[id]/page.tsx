@@ -13,6 +13,7 @@ import ItineraryTimeRange from "@/components/ItineraryTimeRange";
 import { getNote, saveNote } from "@/data/notesStore";
 import {
   addGuest,
+  deleteGuest,
   getGuests,
   updateGuest,
   updateGuestStatus,
@@ -1751,6 +1752,19 @@ export default function ExperienceDetailPage() {
     });
   }
 
+  async function handleDeleteGuest(guest: Guest) {
+    if (!window.confirm(`Remove ${guest.name} from the guest list?`)) return;
+
+    const deleted = await deleteGuest(guest.id);
+    if (!deleted) {
+      window.alert("Could not remove this guest. Please try again.");
+      return;
+    }
+
+    setGuests((current) => current.filter((item) => item.id !== guest.id));
+    if (editingGuestId === guest.id) handleCancelEditGuest();
+  }
+
   function handleStartEditGuest(guest: Guest) {
     setEditingGuestId(guest.id);
     setGuestEditDraft({
@@ -2820,13 +2834,22 @@ export default function ExperienceDetailPage() {
                       <p className="font-serif text-lg text-foreground">
                         {guest.name}
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditGuest(guest)}
-                        className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditGuest(guest)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGuest(guest)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     {guestTab === "all" ? (
                       <div
