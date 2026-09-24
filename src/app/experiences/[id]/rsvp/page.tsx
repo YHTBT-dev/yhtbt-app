@@ -146,7 +146,7 @@ export default function RsvpPage() {
           <span className="text-sm tracking-wide text-muted uppercase">
             Your Name
           </span>
-          <input
+          <input name="name" autoComplete="name"
             type="text"
             required
             value={name}
@@ -160,7 +160,7 @@ export default function RsvpPage() {
           <span className="text-sm tracking-wide text-muted uppercase">
             Email
           </span>
-          <input
+          <input name="email" autoComplete="email"
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -173,7 +173,7 @@ export default function RsvpPage() {
           <span className="text-sm tracking-wide text-muted uppercase">
             Phone
           </span>
-          <input
+          <input name="phone" autoComplete="tel"
             type="tel"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}

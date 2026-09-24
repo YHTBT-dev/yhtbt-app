@@ -10,6 +10,7 @@ type LocationAutocompleteInputProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  name?: string;
   className?: string;
 };
 
@@ -26,6 +27,7 @@ export default function LocationAutocompleteInput({
   onChange,
   placeholder,
   required,
+  name,
   className,
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -222,6 +224,7 @@ export default function LocationAutocompleteInput({
         ref={inputRef}
         type="text"
         required={required}
+        name={name}
         value={value}
         onChange={(event) => handleInputChange(event.target.value)}
         onFocus={() => {

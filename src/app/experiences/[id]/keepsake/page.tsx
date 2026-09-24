@@ -717,7 +717,7 @@ export default function KeepsakePage() {
 
           <label className="block">
             <span className={BOOK_ORDER_LABEL_CLASSES}>Recipient Name</span>
-            <input
+            <input name="recipientName" autoComplete="shipping name"
               type="text"
               required
               value={recipientName}
@@ -729,7 +729,7 @@ export default function KeepsakePage() {
 
           <label className="block">
             <span className={BOOK_ORDER_LABEL_CLASSES}>Address Line 1</span>
-            <input
+            <input name="addressLine1" autoComplete="shipping address-line1"
               type="text"
               required
               value={addressLine1}
@@ -743,7 +743,7 @@ export default function KeepsakePage() {
             <span className={BOOK_ORDER_LABEL_CLASSES}>
               Address Line 2 (Optional)
             </span>
-            <input
+            <input name="addressLine2" autoComplete="shipping address-line2"
               type="text"
               value={addressLine2}
               onChange={(event) => setAddressLine2(event.target.value)}
@@ -755,7 +755,7 @@ export default function KeepsakePage() {
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
             <label className="block">
               <span className={BOOK_ORDER_LABEL_CLASSES}>City</span>
-              <LocationAutocompleteInput
+              <LocationAutocompleteInput name="city"
                 required
                 value={city}
                 onChange={setCity}
@@ -766,7 +766,7 @@ export default function KeepsakePage() {
 
             <label className="block">
               <span className={BOOK_ORDER_LABEL_CLASSES}>Country</span>
-              <select
+              <select name="country" autoComplete="shipping country-name"
                 required
                 value={country}
                 onChange={(event) => setCountry(event.target.value)}
@@ -789,7 +789,7 @@ export default function KeepsakePage() {
                   : "State/Province/Region"}
               </span>
               {country === DEFAULT_BOOK_ORDER_COUNTRY ? (
-                <select
+                <select name="state" autoComplete="shipping address-level1"
                   required
                   value={addressState}
                   onChange={(event) => setAddressState(event.target.value)}
@@ -805,7 +805,7 @@ export default function KeepsakePage() {
                   ))}
                 </select>
               ) : (
-                <input
+                <input name="state" autoComplete="shipping address-level1"
                   type="text"
                   required
                   value={addressState}
@@ -818,7 +818,7 @@ export default function KeepsakePage() {
 
             <label className="block">
               <span className={BOOK_ORDER_LABEL_CLASSES}>ZIP</span>
-              <input
+              <input name="zip" autoComplete="shipping postal-code"
                 type="text"
                 required
                 value={zip}

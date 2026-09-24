@@ -1,5 +1,8 @@
 import { getSupabaseClient } from "@/lib/supabase";
-import { getOrPromptCreatorName } from "@/lib/creatorName";
+import {
+  getOrPromptCreatorName,
+  recordCreatedExperience,
+} from "@/lib/creatorName";
 
 const TABLE_NAME = "experiences";
 
@@ -132,6 +135,7 @@ export async function addExperience(experience) {
     console.error("[experiencesStore] addExperience failed:", error);
     throw error;
   }
+  recordCreatedExperience(data.id);
   return rowToExperience(data);
 }
 

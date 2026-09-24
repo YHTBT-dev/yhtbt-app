@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { deleteExperienceCompletely } from "@/data/deleteExperienceCascade";
+import { hasCreatedExperience } from "@/lib/creatorName";
 import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
@@ -398,6 +399,31 @@ function saveCollapsedSections(
   );
 }
 
+function GearIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={1.5}
+      className="h-5 w-5"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+        // Hollow center when filled so the gear still reads as a gear.
+        fill={filled ? "var(--color-bg, #fff)" : "none"}
+      />
+    </svg>
+  );
+}
+
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -615,12 +641,20 @@ export default function ExperienceDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [now, setNow] = useState(() => new Date());
-  const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
-  // The one place "is the viewer a guest" is decided. Today that's only
-  // the host's Preview as Guest toggle; when real guest accounts exist,
-  // derive this from the viewer's role instead (e.g. `role === "guest"
-  // || isPreviewingAsGuest`) and every guest-facing check below follows.
-  const isGuestView = isPreviewingAsGuest;
+  // Locked (guest view) is the default for anyone opening an Experience;
+  // unlocking (host view) is a manual toggle via the header gear, except
+  // that the browser that created the Experience starts unlocked. null =
+  // "not toggled yet, use the default". No real check behind any of this
+  // (no accounts yet) — it's a UX default, not access control.
+  const [manualUnlock, setManualUnlock] = useState<boolean | null>(null);
+  // Recognized by id (recorded in this browser when it created the
+  // Experience), not by name — see recordCreatedExperience.
+  const isCreatorBrowser = !!experience && hasCreatedExperience(experience.id);
+  const isUnlocked = manualUnlock ?? isCreatorBrowser;
+  // The one place "is the viewer a guest" is decided; every guest-facing
+  // check reads this. When real guest accounts exist, derive it from the
+  // viewer's role instead.
+  const isGuestView = !isUnlocked;
   const [updates, setUpdates] = useState<Update[]>([]);
   const [updateMessage, setUpdateMessage] = useState("");
   const [updateError, setUpdateError] = useState("");
@@ -1932,7 +1966,7 @@ export default function ExperienceDetailPage() {
   }
 
 
-  // Closed polls are hidden entirely from Preview as Guest (not just
+  // Closed polls are hidden entirely from guest view (not just
   // marked closed) — a guest should never even know they existed. The
   // host's own view always sees every poll, open or closed, with a
   // status indicator instead (see the Polls section below).
@@ -1994,15 +2028,15 @@ export default function ExperienceDetailPage() {
     // Private to the host, as on the real page — no content check, just
     // host-only.
     notes: !isGuestView,
-    // Host-only regardless of content: Delete Experience and the
-    // Preview-as-Guest toggle always exist for a host, so it's never
+    // Host-only regardless of content: Delete Experience, the theme
+    // link, and the attendee-count toggle always exist for a host, so it's never
     // empty for them.
     hostTools: !isGuestView,
   };
 
   // Falls back to the phase's first visible tab when nothing has been
   // picked yet, or when the picked tab just disappeared (e.g. switching to
-  // guest preview while on a host-only tab).
+  // locking while on a host-only tab).
   const resolvedActiveTab: ExperienceTabId =
     activeTab && hasContentByTab[activeTab] !== false
       ? activeTab
@@ -2049,30 +2083,32 @@ export default function ExperienceDetailPage() {
             : "border-b border-transparent"
         }`}
       >
-        <Link
-          href="/experiences"
-          className="inline-block font-serif text-sm tracking-[0.2em] text-foreground uppercase transition-colors hover:text-accent"
-        >
-          YHTBT
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            href="/experiences"
+            className="inline-block font-serif text-sm tracking-[0.2em] text-foreground uppercase transition-colors hover:text-accent"
+          >
+            YHTBT
+          </Link>
 
-        {/* The exit control lives here (not in Host Tools) because Host
-            Tools doesn't exist while previewing as a guest — this header
-            is the only thing visible on every tab in both views. */}
-        {isGuestView ? (
-          <div className="mt-3 flex items-center gap-3">
-            <span className="inline-block border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs tracking-widest text-accent uppercase">
-              Previewing as: Guest
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsPreviewingAsGuest(false)}
-              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-            >
-              Switch to Host View
-            </button>
-          </div>
-        ) : null}
+          {/* Always in the header (both states) so it's reachable on every
+              tab, including the ones that only exist when unlocked.
+              Outline = locked (guest view); filled + accent = unlocked. */}
+          <button
+            type="button"
+            onClick={() => setManualUnlock(!isUnlocked)}
+            aria-pressed={isUnlocked}
+            aria-label={
+              isUnlocked ? "Host view — tap to lock" : "Guest view — tap to unlock"
+            }
+            title={isUnlocked ? "Unlocked — tap to lock" : "Locked — tap to unlock"}
+            className={`shrink-0 transition-colors ${
+              isUnlocked ? "text-accent" : "text-muted hover:text-accent"
+            }`}
+          >
+            <GearIcon filled={isUnlocked} />
+          </button>
+        </div>
 
         <div className="mt-3 flex items-baseline gap-3">
           <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
@@ -2317,7 +2353,7 @@ export default function ExperienceDetailPage() {
               <span className="text-sm tracking-wide text-muted uppercase">
                 Name
               </span>
-              <input
+              <input name="guestName" autoComplete="off"
                 type="text"
                 required
                 value={guestName}
@@ -2331,7 +2367,7 @@ export default function ExperienceDetailPage() {
               <span className="text-sm tracking-wide text-muted uppercase">
                 Email
               </span>
-              <input
+              <input name="guestEmail" autoComplete="off"
                 type="email"
                 value={guestEmail}
                 onChange={(event) => setGuestEmail(event.target.value)}
@@ -2344,7 +2380,7 @@ export default function ExperienceDetailPage() {
               <span className="text-sm tracking-wide text-muted uppercase">
                 Phone
               </span>
-              <input
+              <input name="guestPhone" autoComplete="off"
                 type="tel"
                 value={guestPhone}
                 onChange={(event) => setGuestPhone(event.target.value)}
@@ -3384,7 +3420,7 @@ export default function ExperienceDetailPage() {
                 <span className="text-sm tracking-wide text-muted uppercase">
                   New Update
                 </span>
-                <input
+                <input name="updateMessage" autoComplete="off"
                   type="text"
                   required
                   value={updateMessage}
@@ -4683,14 +4719,6 @@ export default function ExperienceDetailPage() {
       ) : resolvedActiveTab === "hostTools" ? (
         <>
         <div className="mt-8 divide-y divide-foreground/10 border-y border-foreground/10">
-          <button
-            type="button"
-            onClick={() => setIsPreviewingAsGuest((current) => !current)}
-            className="flex w-full items-center gap-2 py-4 text-left text-sm tracking-wide text-foreground transition-colors hover:text-accent"
-          >
-            {isGuestView ? "Switch to Host View" : "Preview as Guest"}
-          </button>
-
           <button
             type="button"
             onClick={handleOpenThemeModal}

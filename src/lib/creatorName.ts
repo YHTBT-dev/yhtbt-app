@@ -26,3 +26,36 @@ export function getOrPromptCreatorName(): string {
   }
   return entered;
 }
+
+const CREATED_EXPERIENCE_IDS_STORAGE_KEY = "yhtbt:createdExperienceIds";
+
+function readCreatedExperienceIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CREATED_EXPERIENCE_IDS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Remembers, in this browser only, which Experiences it created — the
+// signal the Experience page uses to start unlocked for its creator.
+// Stronger than matching created_by (a display name anyone can type into
+// their own browser): only the browser that actually ran the creation has
+// the id. Still not real auth — clearing storage forgets it, and it can
+// be edited by hand.
+export function recordCreatedExperience(experienceId: number | string): void {
+  if (typeof window === "undefined") return;
+  const id = String(experienceId);
+  const ids = readCreatedExperienceIds();
+  if (ids.includes(id)) return;
+  window.localStorage.setItem(
+    CREATED_EXPERIENCE_IDS_STORAGE_KEY,
+    JSON.stringify([...ids, id])
+  );
+}
+
+export function hasCreatedExperience(experienceId: number | string): boolean {
+  return readCreatedExperienceIds().includes(String(experienceId));
+}
