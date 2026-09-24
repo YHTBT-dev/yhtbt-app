@@ -29,6 +29,7 @@ export default function LocationAutocompleteInput({
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLUListElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards against a slow, stale request's results landing after a
   // newer keystroke already started a different lookup.
@@ -39,6 +40,56 @@ export default function LocationAutocompleteInput({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  // TEMPORARY diagnostic logging — added to track down a report that the
+  // suggestions dropdown fails specifically at narrow/mobile viewport
+  // widths (confirmed via Chrome mobile emulation). Logs whether the
+  // dropdown is actually in the DOM, its real computed position/size,
+  // the viewport width, and — most tellingly — what element is actually
+  // sitting at its center point (elementFromPoint), which directly
+  // reveals whether something else is covering it. Remove once that's
+  // confirmed fixed.
+  useEffect(() => {
+    if (!isOpen) {
+      console.log("[LocationAutocomplete] closed/not rendering");
+      return;
+    }
+
+    // Runs after paint so getBoundingClientRect reflects real layout.
+    const frame = requestAnimationFrame(() => {
+      const dropdownEl = dropdownRef.current;
+      const containerEl = containerRef.current;
+      if (!dropdownEl || !containerEl) {
+        console.log(
+          "[LocationAutocomplete] isOpen is true but dropdown/container ref is null — not actually in the DOM"
+        );
+        return;
+      }
+
+      const dropdownRect = dropdownEl.getBoundingClientRect();
+      const containerRect = containerEl.getBoundingClientRect();
+      const centerX = dropdownRect.left + dropdownRect.width / 2;
+      const centerY = dropdownRect.top + dropdownRect.height / 2;
+      const topElementAtCenter = document.elementFromPoint(centerX, centerY);
+
+      console.log("[LocationAutocomplete] dropdown is in the DOM", {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        containerRect,
+        dropdownRect,
+        computedDisplay: getComputedStyle(dropdownEl).display,
+        computedVisibility: getComputedStyle(dropdownEl).visibility,
+        computedOpacity: getComputedStyle(dropdownEl).opacity,
+        computedZIndex: getComputedStyle(dropdownEl).zIndex,
+        // If this is NOT the dropdown (or one of its list items), some
+        // other element is visually covering it at that point.
+        elementCoveringCenterPoint: topElementAtCenter,
+        isDropdownCoveringItself: dropdownEl.contains(topElementAtCenter),
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, suggestions]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -85,6 +136,10 @@ export default function LocationAutocompleteInput({
       latestQueryRef.current = trimmed;
       const results = await fetchPlaceSuggestions(trimmed);
       if (latestQueryRef.current !== trimmed) return;
+      console.log(
+        `[LocationAutocomplete] setting ${results.length} suggestion(s), opening:`,
+        results.length > 0
+      );
       setSuggestions(results);
       setIsOpen(results.length > 0);
     }, DEBOUNCE_MS);
@@ -114,7 +169,11 @@ export default function LocationAutocompleteInput({
       />
 
       {isOpen && suggestions.length > 0 ? (
-        <ul className="absolute top-full left-0 z-20 mt-1 w-full border border-foreground/10 bg-background shadow-lg">
+        <ul
+          ref={dropdownRef}
+          data-location-autocomplete-dropdown
+          className="absolute top-full left-0 z-20 mt-1 w-full border border-foreground/10 bg-background shadow-lg"
+        >
           {suggestions.map((suggestion) => (
             <li key={suggestion.placeId}>
               <button
