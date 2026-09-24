@@ -1,11 +1,13 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getExperiences } from "@/data/experiencesStore";
+import dynamic from "next/dynamic";
+import { getExperiences, updateExperience } from "@/data/experiencesStore";
 import { deleteItineraryItem, getItineraryItems } from "@/data/itineraryStore";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
+import { getNote, saveNote } from "@/data/notesStore";
 import { addGuest, getGuests, updateGuestStatus } from "@/data/guestsStore";
 import {
   addTravelDetail,
@@ -14,22 +16,62 @@ import {
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
+import { addFaq, getFaqs, updateFaq } from "@/data/faqsStore";
+import { getSuggestedFaqQuestions } from "@/data/suggestedFaqs";
+import {
+  addPoll,
+  getPolls,
+  getVotedPollIds,
+  markPollVoted,
+  deletePoll,
+  recordVote,
+  setPollOpen,
+} from "@/data/pollsStore";
+import {
+  addPhoto,
+  deletePhoto,
+  getPhotos,
+  setPhotoItineraryItem,
+  setPhotoTags,
+} from "@/data/photosStore";
+import {
+  addMyReflectionId,
+  addReflection,
+  getMyReflectionIds,
+  getReflections,
+  hideReflection,
+  OPEN_ENDED_REFLECTION_PROMPT_ID,
+  REFLECTION_PROMPTS,
+  updateReflection,
+} from "@/data/reflectionsStore";
 import {
   BOOK_ORDER_STATUSES,
   getBookOrders,
   updateBookOrderStatus,
 } from "@/data/bookOrdersStore";
+import {
+  addRecommendation,
+  deleteRecommendation,
+  getRecommendations,
+  RECOMMENDATION_CATEGORIES,
+  updateRecommendation,
+} from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
+import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
   addDaysToLocalDateString,
   formatDateHeading,
   formatLocalDateString,
   formatRelativeTime,
+  formatShortDate,
   formatTime,
   formatTimeRange,
+  getPhotoDownloadFilename,
   groupByDate,
   parseLocalDate,
 } from "@/lib/format";
+import { compressImageToBlob } from "@/lib/compressImage";
+import { deleteExperiencePhoto, uploadExperiencePhoto } from "@/lib/supabase";
 import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
 import DateRangePickerField, {
   type DateRange,
@@ -45,6 +87,14 @@ import ExperienceTabBar, {
 // sections (relocated verbatim from that page); the remaining tabs are
 // still placeholders. Safe to delete once the real page adopts this.
 
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
+
+const NOTE_SAVE_DEBOUNCE_MS = 800;
+const SAVED_INDICATOR_DURATION_MS = 2000;
+const NOTE_TOOLBAR_MODULES = {
+  toolbar: [["bold", "italic"], [{ list: "bullet" }]],
+};
+const NOTE_FORMATS = ["bold", "italic", "list"];
 const RSVP_STATUS_OPTIONS: { label: string; value: Guest["rsvpStatus"] }[] = [
   { label: "Invited", value: "invited" },
   { label: "Confirmed", value: "confirmed" },
@@ -148,6 +198,73 @@ type Update = {
 // with the prompt (see the Reflections feed layout below).
 // Polaroid card rendering (fixed palette, rotation, tints, truncation)
 // lives in src/components/PolaroidCard.tsx, shared with the keepsake page.
+
+type Faq = {
+  id: number;
+  experienceId: string;
+  question: string;
+  answer: string;
+};
+
+type Poll = {
+  id: number;
+  experienceId: string;
+  question: string;
+  options: string[];
+  votes: Record<string, number>;
+  isOpen: boolean;
+};
+
+const MIN_POLL_OPTIONS = 2;
+const MAX_POLL_OPTIONS = 5;
+
+type Photo = {
+  id: number;
+  experienceId: string;
+  dataUrl: string;
+  taggedNames: string[];
+  itineraryItemId: number | null;
+  timestamp: string;
+};
+
+const MAX_PHOTO_SIZE_BYTES = 2 * 1024 * 1024;
+
+type Reflection = {
+  id: number;
+  experienceId: string;
+  promptId: number;
+  promptText: string;
+  responseText: string;
+  photo: string | null;
+  guestName: string;
+  taggedGuests: string[];
+  createdAt: string;
+  hidden: boolean;
+  editedAt: string | null;
+};
+
+type Recommendation = {
+  id: number;
+  experienceId: string;
+  name: string;
+  category: string;
+  description: string;
+  link: string;
+};
+
+const RECOMMENDATION_FIELD_CLASSES =
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
+const RECOMMENDATION_LABEL_CLASSES =
+  "text-sm tracking-wide text-muted uppercase";
+
+// Tighter when a photo is attached, since the response then shares space
+// with the prompt (see the Reflections feed layout below).
+const REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO = 100;
+const REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO = 240;
+const REFLECTION_FIELD_CLASSES =
+  "mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none";
+const REFLECTION_LABEL_CLASSES = "text-sm tracking-wide text-muted uppercase";
+// Polaroid card rendering (fixed palette, rotation, tints, truncation)
 
 type FlightDetail = {
   id: number;
@@ -347,9 +464,6 @@ const TAB_ORDER_FOR_DEFAULT: Record<ExperiencePhase, ExperienceTabId[]> = {
 
 const TAB_PLACEHOLDER_TEXT: Partial<Record<ExperienceTabId, string>> = {
   chat: "Placeholder: the group conversation will live here.",
-  details: "Placeholder: cover image, dates, location, and FAQs will live here.",
-  photos: "Placeholder: the shared photo album will live here.",
-  notes: "Placeholder: the host's private notes-to-self will live here.",
   hostTools: "Placeholder: host-only controls (delete, theme, preview-as-guest) will live here.",
 };
 
@@ -404,6 +518,84 @@ export default function ExperienceTabsPreviewPage() {
   >({});
   const [travelDetailEditError, setTravelDetailEditError] = useState("");
   // real access control.
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [faqQuestion, setFaqQuestion] = useState("");
+  const [faqAnswer, setFaqAnswer] = useState("");
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [faqAddError, setFaqAddError] = useState("");
+  const [editingFaqId, setEditingFaqId] = useState<number | null>(null);
+  const [faqEditDraft, setFaqEditDraft] = useState<Record<string, string>>(
+    {}
+  );
+  const [faqEditError, setFaqEditError] = useState("");
+  const [isSuggestFaqsModalOpen, setIsSuggestFaqsModalOpen] = useState(false);
+  const [selectedSuggestedQuestions, setSelectedSuggestedQuestions] =
+    useState<string[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [votedPollIds, setVotedPollIds] = useState<number[]>([]);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [isPollModalOpen, setIsPollModalOpen] = useState(false);
+  const [pollError, setPollError] = useState("");
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photoUploadError, setPhotoUploadError] = useState("");
+  const [taggingPhotoId, setTaggingPhotoId] = useState<number | null>(null);
+  const [photoTagInputValue, setPhotoTagInputValue] = useState("");
+  const [linkingPhotoId, setLinkingPhotoId] = useState<number | null>(null);
+  const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [reflectionPromptId, setReflectionPromptId] = useState(
+    REFLECTION_PROMPTS[0].id
+  );
+  const [reflectionCustomPromptText, setReflectionCustomPromptText] =
+    useState("");
+  const [reflectionResponseText, setReflectionResponseText] = useState("");
+  const [reflectionPhoto, setReflectionPhoto] = useState("");
+  const [reflectionPhotoError, setReflectionPhotoError] = useState("");
+  const [reflectionTagInput, setReflectionTagInput] = useState("");
+  const [reflectionTaggedGuests, setReflectionTaggedGuests] = useState<
+    string[]
+  >([]);
+  const [reflectionError, setReflectionError] = useState("");
+  const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
+  const [expandedReflection, setExpandedReflection] =
+    useState<Reflection | null>(null);
+  const [editingReflectionId, setEditingReflectionId] = useState<
+    number | null
+  >(null);
+  // The photo the reflection being edited had when the modal opened —
+  // distinct from reflectionPhoto (the form's current working value) so
+  // handleCloseReflectionModal and the photo Replace/Remove controls can
+  // tell a freshly-uploaded scratch file (safe to delete immediately) apart
+  // from the original, still-persisted photo (must not be deleted from
+  // Storage until the edit is actually saved). "" for a new reflection.
+  const [reflectionOriginalPhoto, setReflectionOriginalPhoto] = useState("");
+  const [myReflectionIds, setMyReflectionIds] = useState<number[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(
+    []
+  );
+  const [isRecommendationModalOpen, setIsRecommendationModalOpen] =
+    useState(false);
+  const [recommendationName, setRecommendationName] = useState("");
+  const [recommendationCategory, setRecommendationCategory] = useState(
+    RECOMMENDATION_CATEGORIES[0]
+  );
+  const [recommendationDescription, setRecommendationDescription] =
+    useState("");
+  const [recommendationLink, setRecommendationLink] = useState("");
+  const [recommendationError, setRecommendationError] = useState("");
+  const [editingRecommendationId, setEditingRecommendationId] = useState<
+    number | null
+  >(null);
+  const [recommendationEditDraft, setRecommendationEditDraft] = useState<
+    Record<string, string>
+  >({});
+  const [recommendationEditError, setRecommendationEditError] = useState("");
+  const [note, setNote] = useState("");
+  const [showSaved, setShowSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [bookOrders, setBookOrders] = useState<BookOrder[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [isPreviewingAsGuest, setIsPreviewingAsGuest] = useState(false);
@@ -454,6 +646,22 @@ export default function ExperienceTabsPreviewPage() {
     getBookOrders(params.id).then((fetched) => {
       if (!cancelled) setBookOrders(fetched);
     });
+    setNote(getNote(params.id));
+    setVotedPollIds(getVotedPollIds());
+    getPhotos(params.id).then((fetched) => {
+      if (!cancelled) setPhotos(fetched);
+    });
+    getPolls(params.id).then((fetched) => {
+      if (!cancelled) setPolls(fetched);
+    });
+    getFaqs(params.id).then((fetched) => {
+      if (!cancelled) setFaqs(fetched);
+    });
+    getReflections(params.id).then((fetched) => {
+      if (!cancelled) setReflections(fetched);
+    });
+    setMyReflectionIds(getMyReflectionIds());
+    setRecommendations(getRecommendations(params.id));
     setCollapsedSections(loadCollapsedSections(params.id));
 
     return () => {
@@ -477,6 +685,667 @@ export default function ExperienceTabsPreviewPage() {
     setBookOrders((current) =>
       current.map((order) => (order.id === id ? updated : order))
     );
+  }
+
+  async function handleAddFaq(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      const newFaq = await addFaq({
+        experienceId: params.id,
+        question: faqQuestion,
+        answer: faqAnswer,
+      });
+
+      setFaqs((current) => [...current, newFaq]);
+      setFaqQuestion("");
+      setFaqAnswer("");
+      setIsFaqModalOpen(false);
+      setFaqAddError("");
+    } catch {
+      setFaqAddError("Could not add this FAQ. Please try again.");
+    }
+  }
+
+  function handleCloseFaqModal() {
+    setIsFaqModalOpen(false);
+    setFaqQuestion("");
+    setFaqAnswer("");
+    setFaqAddError("");
+  }
+
+  function handleStartEditFaq(faq: Faq) {
+    setEditingFaqId(faq.id);
+    setFaqEditError("");
+    setFaqEditDraft({ question: faq.question, answer: faq.answer });
+  }
+
+  function handleFaqEditDraftChange(field: string, value: string) {
+    setFaqEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditFaq() {
+    setEditingFaqId(null);
+    setFaqEditDraft({});
+    setFaqEditError("");
+  }
+
+  async function handleSaveEditFaq(faq: Faq) {
+    const draft = faqEditDraft;
+
+    if (!draft.question?.trim()) {
+      setFaqEditError("Enter a question.");
+      return;
+    }
+
+    const updatedFaq = await updateFaq(faq.id, {
+      question: draft.question.trim(),
+      answer: (draft.answer ?? "").trim(),
+    });
+    if (updatedFaq) {
+      setFaqs((current) =>
+        current.map((item) => (item.id === faq.id ? updatedFaq : item))
+      );
+      setEditingFaqId(null);
+      setFaqEditDraft({});
+      setFaqEditError("");
+    } else {
+      setFaqEditError("Could not save this FAQ. Please try again.");
+    }
+  }
+
+  function handleOpenSuggestFaqsModal() {
+    setSelectedSuggestedQuestions([]);
+    setFaqAddError("");
+    setIsSuggestFaqsModalOpen(true);
+  }
+
+  function handleCloseSuggestFaqsModal() {
+    setIsSuggestFaqsModalOpen(false);
+    setSelectedSuggestedQuestions([]);
+    setFaqAddError("");
+  }
+
+  function handleToggleSuggestedQuestion(question: string) {
+    setSelectedSuggestedQuestions((current) =>
+      current.includes(question)
+        ? current.filter((item) => item !== question)
+        : [...current, question]
+    );
+  }
+
+  // Each selected question becomes its own draft FAQ — question
+  // pre-filled, answer left blank — so the host fills in answers (and can
+  // still tweak the question wording) the same way they'd edit any other
+  // FAQ entry, via the Edit control added to each row below.
+  async function handleAddSelectedSuggestedFaqs() {
+    if (selectedSuggestedQuestions.length === 0) {
+      setIsSuggestFaqsModalOpen(false);
+      return;
+    }
+
+    let newFaqs;
+    try {
+      newFaqs = await Promise.all(
+        selectedSuggestedQuestions.map((question) =>
+          addFaq({
+            experienceId: params.id,
+            question,
+            answer: "",
+          })
+        )
+      );
+    } catch {
+      setFaqAddError("Could not add the selected FAQs. Please try again.");
+      return;
+    }
+
+    setFaqs((current) => [...current, ...newFaqs]);
+    setIsSuggestFaqsModalOpen(false);
+    setSelectedSuggestedQuestions([]);
+  }
+
+  function handlePollOptionChange(index: number, value: string) {
+    setPollOptions((current) =>
+      current.map((option, i) => (i === index ? value : option))
+    );
+  }
+
+  function handleAddPollOption() {
+    setPollOptions((current) =>
+      current.length >= MAX_POLL_OPTIONS ? current : [...current, ""]
+    );
+  }
+
+  function handleClosePollModal() {
+    setIsPollModalOpen(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setPollError("");
+  }
+
+  async function handleAddPoll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedOptions = pollOptions
+      .map((option) => option.trim())
+      .filter(Boolean);
+    if (trimmedOptions.length < MIN_POLL_OPTIONS) return;
+
+    try {
+      const newPoll = await addPoll({
+        experienceId: params.id,
+        question: pollQuestion,
+        options: trimmedOptions,
+      });
+
+      setPolls((current) => [...current, newPoll]);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      setIsPollModalOpen(false);
+      setPollError("");
+    } catch {
+      setPollError("Could not add this poll. Please try again.");
+    }
+  }
+
+  async function handleVote(pollId: number, option: string) {
+    if (votedPollIds.includes(pollId)) return;
+
+    const updatedPoll = await recordVote(pollId, option);
+    if (!updatedPoll) return;
+
+    setPolls((current) =>
+      current.map((poll) => (poll.id === pollId ? updatedPoll : poll))
+    );
+    markPollVoted(pollId);
+    setVotedPollIds((current) => [...current, pollId]);
+  }
+
+  async function handleDeletePoll(pollId: number) {
+    if (!window.confirm("Delete this poll?")) return;
+
+    const deleted = await deletePoll(pollId);
+    if (!deleted) return;
+
+    setPolls((current) => current.filter((poll) => poll.id !== pollId));
+    setVotedPollIds((current) => current.filter((id) => id !== pollId));
+  }
+
+  async function handleTogglePollOpen(pollId: number, nextIsOpen: boolean) {
+    const updatedPoll = await setPollOpen(pollId, nextIsOpen);
+    if (!updatedPoll) return;
+
+    setPolls((current) =>
+      current.map((poll) => (poll.id === pollId ? updatedPoll : poll))
+    );
+  }
+
+  function handleStartTagPhoto(photoId: number) {
+    setTaggingPhotoId(photoId);
+    setPhotoTagInputValue("");
+  }
+
+  function handleCloseTagPhoto() {
+    setTaggingPhotoId(null);
+    setPhotoTagInputValue("");
+  }
+
+  async function handleAddPhotoTagNow(photoId: number, rawName: string) {
+    const trimmed = rawName.trim();
+    if (!trimmed) return;
+
+    const photo = photos.find((item) => item.id === photoId);
+    if (!photo || photo.taggedNames.includes(trimmed)) {
+      setPhotoTagInputValue("");
+      return;
+    }
+
+    const updatedPhoto = await setPhotoTags(photoId, [...photo.taggedNames, trimmed]);
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((item) => (item.id === photoId ? updatedPhoto : item))
+      );
+    }
+    setPhotoTagInputValue("");
+  }
+
+  async function handleRemovePhotoTagNow(photoId: number, name: string) {
+    const photo = photos.find((item) => item.id === photoId);
+    if (!photo) return;
+
+    const updatedPhoto = await setPhotoTags(
+      photoId,
+      photo.taggedNames.filter((tag) => tag !== name)
+    );
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((item) => (item.id === photoId ? updatedPhoto : item))
+      );
+    }
+  }
+
+  async function handleDeletePhoto(photoId: number) {
+    if (!window.confirm("Delete this photo? This can't be undone.")) return;
+
+    await deletePhoto(photoId);
+    setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+    if (taggingPhotoId === photoId) {
+      setTaggingPhotoId(null);
+      setPhotoTagInputValue("");
+    }
+    if (linkingPhotoId === photoId) {
+      setLinkingPhotoId(null);
+    }
+  }
+
+  function handleStartLinkPhoto(photoId: number) {
+    setLinkingPhotoId(photoId);
+  }
+
+  function handleCloseLinkPhoto() {
+    setLinkingPhotoId(null);
+  }
+
+  async function handleSelectPhotoItineraryItem(photoId: number, value: string) {
+    const itineraryItemId = value ? Number(value) : null;
+    const updatedPhoto = await setPhotoItineraryItem(photoId, itineraryItemId);
+    if (updatedPhoto) {
+      setPhotos((current) =>
+        current.map((photo) => (photo.id === photoId ? updatedPhoto : photo))
+      );
+    }
+    setLinkingPhotoId(null);
+  }
+
+  async function handlePhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    setPhotoUploadError("");
+
+    try {
+      // Compressed first (resized + re-encoded as JPEG) so the size limit
+      // and the actual upload are both against what gets stored, not the
+      // original file — a typical phone photo well over 2MB raw usually
+      // compresses down comfortably under it.
+      const blob = await compressImageToBlob(file);
+
+      if (blob.size > MAX_PHOTO_SIZE_BYTES) {
+        setPhotoUploadError("Photo is too large even after compression.");
+        input.value = "";
+        return;
+      }
+
+      const dataUrl = await uploadExperiencePhoto(params.id, blob);
+      const newPhoto = await addPhoto({
+        experienceId: params.id,
+        dataUrl,
+      });
+
+      setPhotos((current) => [newPhoto, ...current]);
+      input.value = "";
+    } catch {
+      setPhotoUploadError("Could not upload that photo. Try again.");
+      input.value = "";
+    }
+  }
+
+  async function handleReflectionPhotoFileChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    setReflectionPhotoError("");
+
+    try {
+      const blob = await compressImageToBlob(file);
+
+      if (blob.size > MAX_PHOTO_SIZE_BYTES) {
+        setReflectionPhotoError(
+          "Photo is too large even after compression."
+        );
+        input.value = "";
+        return;
+      }
+
+      const uploadedUrl = await uploadExperiencePhoto(params.id, blob);
+
+      // Replacing an already-uploaded (but not yet submitted) selection —
+      // that previous upload would otherwise become an orphaned file in
+      // Storage, since nothing ever attaches it to a saved reflection.
+      // EXCEPT when the photo being replaced is the original photo of a
+      // reflection under edit (reflectionPhoto === reflectionOriginalPhoto)
+      // — that file is still referenced by the persisted entry until the
+      // edit is actually saved, so it's deleted then instead (see
+      // handleSubmitReflection), not here.
+      if (reflectionPhoto && reflectionPhoto !== reflectionOriginalPhoto) {
+        void deleteExperiencePhoto(reflectionPhoto);
+      }
+
+      setReflectionPhoto(uploadedUrl);
+      input.value = "";
+    } catch {
+      setReflectionPhotoError("Could not upload that photo. Try again.");
+      input.value = "";
+    }
+  }
+
+  function handleAddReflectionTag(rawName: string) {
+    const trimmed = rawName.trim();
+    if (!trimmed || reflectionTaggedGuests.includes(trimmed)) {
+      setReflectionTagInput("");
+      return;
+    }
+
+    setReflectionTaggedGuests((current) => [...current, trimmed]);
+    setReflectionTagInput("");
+  }
+
+  function handleRemoveReflectionTag(name: string) {
+    setReflectionTaggedGuests((current) =>
+      current.filter((tag) => tag !== name)
+    );
+  }
+
+  async function handleSubmitReflection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const isOpenEnded = reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID;
+    const promptText = isOpenEnded
+      ? reflectionCustomPromptText.trim()
+      : (REFLECTION_PROMPTS.find((prompt) => prompt.id === reflectionPromptId)
+          ?.text ?? "");
+
+    if (isOpenEnded && !promptText) {
+      setReflectionError("Write your own prompt.");
+      return;
+    }
+
+    if (!reflectionResponseText.trim()) {
+      setReflectionError("Enter a response.");
+      return;
+    }
+
+    const maxResponseLength = reflectionPhoto
+      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO;
+    if (reflectionResponseText.length > maxResponseLength) {
+      setReflectionError(
+        `Response must be ${maxResponseLength} characters or fewer${
+          reflectionPhoto ? " when a photo is attached" : ""
+        }.`
+      );
+      return;
+    }
+
+    setReflectionError("");
+
+    if (editingReflectionId) {
+      const updated = await updateReflection(editingReflectionId, {
+        promptId: reflectionPromptId,
+        promptText,
+        responseText: reflectionResponseText.trim(),
+        photo: reflectionPhoto || null,
+        taggedGuests: reflectionTaggedGuests,
+      });
+      console.log("[handleSubmitReflection] updated reflection:", updated);
+
+      if (!updated) {
+        setReflectionError("Could not save this reflection. Please try again.");
+        return;
+      }
+
+      // The original photo is only safe to delete now — the edit is
+      // actually committed, so the record no longer points at it (it was
+      // replaced or removed during this edit).
+      if (
+        reflectionOriginalPhoto &&
+        reflectionOriginalPhoto !== (reflectionPhoto || "")
+      ) {
+        void deleteExperiencePhoto(reflectionOriginalPhoto);
+      }
+
+      setReflections((current) =>
+        current.map((reflection) =>
+          reflection.id === updated.id ? updated : reflection
+        )
+      );
+    } else {
+      let newReflection;
+      try {
+        newReflection = await addReflection({
+          experienceId: params.id,
+          promptId: reflectionPromptId,
+          promptText,
+          responseText: reflectionResponseText.trim(),
+          photo: reflectionPhoto || null,
+          // Unattributed for now, same as Updates — see the FUTURE note in
+          // reflectionsStore.js.
+          guestName: "",
+          taggedGuests: reflectionTaggedGuests,
+        });
+      } catch {
+        setReflectionError("Could not share this reflection. Please try again.");
+        return;
+      }
+      console.log("[handleSubmitReflection] saved reflection:", newReflection);
+
+      addMyReflectionId(newReflection.id);
+      setMyReflectionIds((current) => [...current, newReflection.id]);
+      setReflections((current) => [newReflection, ...current]);
+    }
+
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
+    setReflectionPromptId(REFLECTION_PROMPTS[0].id);
+    setReflectionCustomPromptText("");
+    setReflectionResponseText("");
+    setReflectionPhoto("");
+    setReflectionPhotoError("");
+    setReflectionTagInput("");
+    setReflectionTaggedGuests([]);
+    setIsReflectionModalOpen(false);
+  }
+
+  function handleCloseReflectionModal() {
+    // Abandoning the form after a photo was already uploaded (upload
+    // happens immediately on file selection, before the reflection
+    // itself is ever saved) — without this, that file would be orphaned
+    // in Storage with nothing ever pointing at it. Never deletes
+    // reflectionOriginalPhoto here: when editing, that file is still the
+    // one the persisted entry actually references until a save commits a
+    // different one, so closing without saving must leave it alone.
+    if (reflectionPhoto && reflectionPhoto !== reflectionOriginalPhoto) {
+      void deleteExperiencePhoto(reflectionPhoto);
+    }
+
+    setIsReflectionModalOpen(false);
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
+    setReflectionPromptId(REFLECTION_PROMPTS[0].id);
+    setReflectionCustomPromptText("");
+    setReflectionResponseText("");
+    setReflectionPhoto("");
+    setReflectionPhotoError("");
+    setReflectionTagInput("");
+    setReflectionTaggedGuests([]);
+    setReflectionError("");
+  }
+
+  function handleOpenNewReflectionModal() {
+    setEditingReflectionId(null);
+    setReflectionOriginalPhoto("");
+    setIsReflectionModalOpen(true);
+  }
+
+  function handleOpenEditReflectionModal(reflection: Reflection) {
+    setEditingReflectionId(reflection.id);
+    setReflectionPromptId(reflection.promptId);
+    setReflectionCustomPromptText(
+      reflection.promptId === OPEN_ENDED_REFLECTION_PROMPT_ID
+        ? reflection.promptText
+        : ""
+    );
+    setReflectionResponseText(reflection.responseText);
+    setReflectionPhoto(reflection.photo ?? "");
+    setReflectionOriginalPhoto(reflection.photo ?? "");
+    setReflectionPhotoError("");
+    setReflectionTagInput("");
+    setReflectionTaggedGuests(reflection.taggedGuests);
+    setReflectionError("");
+    setIsReflectionModalOpen(true);
+  }
+
+  function handleToggleReflectionsEnabled() {
+    if (!experience) return;
+
+    const nextReflectionsEnabled = !experience.reflectionsEnabled;
+    // Optimistic — the UI flips immediately rather than waiting on the
+    // network round-trip; the write itself isn't awaited here, matching
+    // the same fire-and-forget pattern already used for the Supabase
+    // Storage calls elsewhere in this file (e.g. deleteExperiencePhoto).
+    void updateExperience(experience.id, {
+      reflectionsEnabled: nextReflectionsEnabled,
+    });
+    setExperience((current) =>
+      current ? { ...current, reflectionsEnabled: nextReflectionsEnabled } : current
+    );
+  }
+
+  async function handleHideReflection(id: number) {
+    if (
+      !window.confirm(
+        "Delete this reflection? It will no longer be visible to anyone."
+      )
+    ) {
+      return;
+    }
+
+    await hideReflection(id);
+    setReflections((current) =>
+      current.filter((reflection) => reflection.id !== id)
+    );
+  }
+
+  function handleOpenRecommendationModal() {
+    setRecommendationError("");
+    setIsRecommendationModalOpen(true);
+  }
+
+  function handleCloseRecommendationModal() {
+    setIsRecommendationModalOpen(false);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setRecommendationError("");
+  }
+
+  function handleAddRecommendation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!recommendationName.trim() || !recommendationDescription.trim()) {
+      setRecommendationError("Name and description are required.");
+      return;
+    }
+
+    setRecommendationError("");
+
+    const newRecommendation = addRecommendation({
+      experienceId: params.id,
+      name: recommendationName.trim(),
+      category: recommendationCategory,
+      description: recommendationDescription.trim(),
+      link: recommendationLink.trim(),
+    });
+
+    setRecommendations((current) => [...current, newRecommendation]);
+    setRecommendationName("");
+    setRecommendationCategory(RECOMMENDATION_CATEGORIES[0]);
+    setRecommendationDescription("");
+    setRecommendationLink("");
+    setIsRecommendationModalOpen(false);
+  }
+
+  function handleStartEditRecommendation(entry: Recommendation) {
+    setEditingRecommendationId(entry.id);
+    setRecommendationEditError("");
+    setRecommendationEditDraft({
+      name: entry.name,
+      category: entry.category,
+      description: entry.description,
+      link: entry.link,
+    });
+  }
+
+  function handleRecommendationEditDraftChange(field: string, value: string) {
+    setRecommendationEditDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleCancelEditRecommendation() {
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleSaveEditRecommendation(entry: Recommendation) {
+    const draft = recommendationEditDraft;
+
+    if (!draft.name?.trim() || !draft.description?.trim()) {
+      setRecommendationEditError("Name and description are required.");
+      return;
+    }
+
+    const updatedEntry = updateRecommendation(entry.id, {
+      name: draft.name.trim(),
+      category: draft.category,
+      description: draft.description.trim(),
+      link: (draft.link ?? "").trim(),
+    });
+    if (updatedEntry) {
+      setRecommendations((current) =>
+        current.map((item) => (item.id === entry.id ? updatedEntry : item))
+      );
+    }
+
+    setEditingRecommendationId(null);
+    setRecommendationEditDraft({});
+    setRecommendationEditError("");
+  }
+
+  function handleDeleteRecommendation(id: number) {
+    if (!window.confirm("Delete this recommendation?")) return;
+
+    deleteRecommendation(id);
+    setRecommendations((current) => current.filter((item) => item.id !== id));
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+    };
+  }, []);
+
+  function handleNoteChange(value: string) {
+    setNote(value);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveNote(params.id, value);
+      setShowSaved(true);
+
+      if (savedIndicatorTimerRef.current)
+        clearTimeout(savedIndicatorTimerRef.current);
+      savedIndicatorTimerRef.current = setTimeout(() => {
+        setShowSaved(false);
+      }, SAVED_INDICATOR_DURATION_MS);
+    }, NOTE_SAVE_DEBOUNCE_MS);
   }
 
   async function handleAddUpdate(event: FormEvent<HTMLFormElement>) {
@@ -934,6 +1803,14 @@ export default function ExperienceTabsPreviewPage() {
   }
 
 
+  // Closed polls are hidden entirely from Preview as Guest (not just
+  // marked closed) — a guest should never even know they existed. The
+  // host's own view always sees every poll, open or closed, with a
+  // status indicator instead (see the Polls section below).
+  const visiblePolls = isPreviewingAsGuest
+    ? polls.filter((poll) => poll.isOpen)
+    : polls;
+
   // Recomputed on every render (never stored) — see computeExperiencePhase.
   // The override below exists only for this preview, so all three
   // phases' tab orderings can be exercised from a single Experience
@@ -953,19 +1830,28 @@ export default function ExperienceTabsPreviewPage() {
   // Itinerary and Guests are always shown, empty or not. Updates hides
   // whenever there are zero updates, in host view too. Tabs not migrated
   // yet stay visible via the tab bar's default.
+  // Hide-when-empty applies to the guest view only. A host always keeps
+  // every tab reachable, empty or not, so they can add the first item
+  // (each section shows its own "No X yet" state plus its Add control);
+  // a guest has nothing to do in an empty section, so it's hidden there.
+  // Tabs not migrated yet (Chat) stay visible via the tab bar's default.
   const hasContentByTab: Partial<Record<ExperienceTabId, boolean>> = {
     itinerary: true,
     guests: true,
-    updates: updates.length > 0,
-    // Book Orders is the only real content this tab holds right now, and
-    // it's host-only, so the tab hides when there are no orders or in
-    // guest preview.
-    // TODO(Group 2/3): once Delete Experience, the theme picker, and the
-    // Preview-as-Guest toggle are migrated into this tab, change this to
-    // `hostTools: !isPreviewingAsGuest` and drop the bookOrders.length
-    // condition — those controls exist whether or not an order was ever
-    // placed, so the tab should never be empty for a host.
-    hostTools: bookOrders.length > 0 && !isPreviewingAsGuest,
+    updates: !isPreviewingAsGuest || updates.length > 0,
+    // A guest's poll count excludes closed polls, matching what they see.
+    details:
+      !isPreviewingAsGuest ||
+      recommendations.length > 0 ||
+      faqs.length > 0 ||
+      visiblePolls.length > 0,
+    photos: true,
+    // Private to the host, as on the real page — no content check, just
+    // host-only.
+    notes: !isPreviewingAsGuest,
+    // Host-only regardless of content (Book Orders now; Delete Experience,
+    // the theme picker, and the Preview-as-Guest toggle once migrated).
+    hostTools: !isPreviewingAsGuest,
   };
 
   // Guard against sitting on a tab that just disappeared (e.g. toggling
@@ -2357,6 +3243,1252 @@ export default function ExperienceTabsPreviewPage() {
       </div>
       ) : null}
 
+        </>
+      ) : resolvedActiveTab === "details" ? (
+        <>
+      {faqs.length > 0 || !isPreviewingAsGuest ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("faqs")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.faqs} />
+            FAQs
+          </button>
+        </h2>
+
+        {collapsedSections.faqs ? null : (
+          <>
+            {isPreviewingAsGuest ? null : (
+            <div className="mt-6 flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={handleOpenSuggestFaqsModal}
+                className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+              >
+                Suggest FAQs
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFaqModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add FAQ
+              </button>
+            </div>
+            )}
+
+            <Modal
+              isOpen={isFaqModalOpen}
+              onClose={handleCloseFaqModal}
+              title="Add FAQ"
+            >
+              <form
+                onSubmit={handleAddFaq}
+                className="flex flex-col gap-6"
+              >
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={faqQuestion}
+                    onChange={(event) => setFaqQuestion(event.target.value)}
+                    placeholder="Is there parking on site?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Answer
+                  </span>
+                  <textarea
+                    required
+                    rows={3}
+                    value={faqAnswer}
+                    onChange={(event) => setFaqAnswer(event.target.value)}
+                    className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add FAQ
+                </button>
+              </form>
+            </Modal>
+
+            <Modal
+              isOpen={isSuggestFaqsModalOpen}
+              onClose={handleCloseSuggestFaqsModal}
+              title="Suggest FAQs"
+            >
+              <div className="flex flex-col gap-6">
+                <p className="text-sm text-muted">
+                  Based on this Experience&apos;s type
+                  {experience.experienceType
+                    ? ` (${experience.experienceType})`
+                    : ""}
+                  , here are some commonly asked questions. Selected ones
+                  are added as drafts with the question pre-filled — fill
+                  in (or tweak) the wording afterward.
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  {getSuggestedFaqQuestions(experience.experienceType ?? "").map(
+                    (question: string) => (
+                      <label
+                        key={question}
+                        className="flex items-start gap-3"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSuggestedQuestions.includes(
+                            question
+                          )}
+                          onChange={() =>
+                            handleToggleSuggestedQuestion(question)
+                          }
+                          className="mt-1 h-4 w-4 accent-accent"
+                        />
+                        <span className="font-serif text-lg text-foreground">
+                          {question}
+                        </span>
+                      </label>
+                    )
+                  )}
+                </div>
+
+                {faqAddError ? (
+                  <p className="text-sm text-red-600">{faqAddError}</p>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={handleAddSelectedSuggestedFaqs}
+                  disabled={selectedSuggestedQuestions.length === 0}
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add Selected
+                </button>
+              </div>
+            </Modal>
+
+            {faqs.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No FAQs yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {faqs.map((faq) => {
+                  if (editingFaqId === faq.id) {
+                    const draft = faqEditDraft;
+                    return (
+                      <div
+                        key={faq.id}
+                        className="flex flex-col gap-6 border border-foreground/10 p-4"
+                      >
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Question
+                          </span>
+                          <input
+                            type="text"
+                            required
+                            value={draft.question ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "question",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-sm tracking-wide text-muted uppercase">
+                            Answer
+                          </span>
+                          <textarea
+                            rows={3}
+                            value={draft.answer ?? ""}
+                            onChange={(event) =>
+                              handleFaqEditDraftChange(
+                                "answer",
+                                event.target.value
+                              )
+                            }
+                            className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                        </label>
+
+                        {faqEditError ? (
+                          <p className="text-sm text-red-600">{faqEditError}</p>
+                        ) : null}
+
+                        <div className="flex gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEditFaq(faq)}
+                            className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditFaq}
+                            className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                  <div
+                    key={faq.id}
+                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-8 last:border-b-0"
+                  >
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {faq.question}
+                      </p>
+                      <p className="mt-1 ml-[2.75em] text-sm text-foreground/60">
+                        {faq.answer || (
+                          <span className="italic">No answer yet</span>
+                        )}
+                      </p>
+                    </div>
+                    {isPreviewingAsGuest ? null : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditFaq(faq)}
+                        className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      ) : null}
+
+      {visiblePolls.length > 0 || !isPreviewingAsGuest ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("polls")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.polls} />
+            Polls
+          </button>
+        </h2>
+
+        {collapsedSections.polls ? null : (
+          <>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsPollModalOpen(true)}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Add Poll
+              </button>
+            </div>
+
+            <Modal
+              isOpen={isPollModalOpen}
+              onClose={handleClosePollModal}
+              title="Add Poll"
+            >
+              <form onSubmit={handleAddPoll} className="flex flex-col gap-6">
+                <label className="block">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Question
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={pollQuestion}
+                    onChange={(event) => setPollQuestion(event.target.value)}
+                    placeholder="Where should we go for the group dinner?"
+                    className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  />
+                </label>
+
+                <div className="flex flex-col gap-4">
+                  <span className="text-sm tracking-wide text-muted uppercase">
+                    Options
+                  </span>
+                  {pollOptions.map((option, index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      required
+                      value={option}
+                      onChange={(event) =>
+                        handlePollOptionChange(index, event.target.value)
+                      }
+                      placeholder={`Option ${index + 1}`}
+                      className="w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                    />
+                  ))}
+
+                  {pollOptions.length < MAX_POLL_OPTIONS ? (
+                    <button
+                      type="button"
+                      onClick={handleAddPollOption}
+                      className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      + Add another option
+                    </button>
+                  ) : null}
+                </div>
+
+                {pollError ? (
+                  <p className="text-sm text-red-600">{pollError}</p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                >
+                  Add Poll
+                </button>
+              </form>
+            </Modal>
+
+            {visiblePolls.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No polls yet
+              </div>
+            ) : (
+              <div className="mt-10 flex flex-col gap-8">
+                {visiblePolls.map((poll) => {
+                  const hasVoted = votedPollIds.includes(poll.id);
+                  const totalVotes = Object.values(poll.votes).reduce(
+                    (sum, count) => sum + count,
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={poll.id}
+                      className="border-b border-foreground/10 pb-8 last:border-b-0"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <p className="font-serif text-lg text-foreground">
+                          {poll.question}
+                          {!poll.isOpen ? (
+                            <span className="ml-2 inline-block border border-foreground/10 px-2 py-0.5 align-middle text-xs tracking-wide text-muted uppercase">
+                              Closed
+                            </span>
+                          ) : null}
+                        </p>
+                        {isPreviewingAsGuest ? null : (
+                          <div className="flex shrink-0 items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleTogglePollOpen(poll.id, !poll.isOpen)
+                              }
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              {poll.isOpen ? "Close Poll" : "Reopen Poll"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoll(poll.id)}
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 flex flex-col gap-3">
+                        {poll.options.map((option) => {
+                          const count = poll.votes[option] ?? 0;
+                          const percentage =
+                            totalVotes === 0
+                              ? 0
+                              : Math.round((count / totalVotes) * 100);
+
+                          if (!hasVoted) {
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => handleVote(poll.id, option)}
+                                className="border border-foreground/10 px-4 py-3 text-left font-serif text-lg text-foreground transition-colors hover:border-accent hover:text-accent"
+                              >
+                                {option}
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <div key={option}>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="font-serif text-lg text-foreground">
+                                  {option}
+                                </span>
+                                <span className="shrink-0 text-sm text-foreground/60">
+                                  {count} ({percentage}%)
+                                </span>
+                              </div>
+                              <div className="mt-1 h-2 w-full bg-foreground/10">
+                                <div
+                                  className="h-2 bg-accent"
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      ) : null}
+
+      {recommendations.length > 0 || !isPreviewingAsGuest ? (
+      <div className="mt-12">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("recommendations")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.recommendations} />
+            Recommendations
+          </button>
+        </h2>
+
+        {collapsedSections.recommendations ? null : (
+        <>
+        {isPreviewingAsGuest ? null : (
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={handleOpenRecommendationModal}
+            className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+          >
+            Add Recommendation
+          </button>
+        </div>
+        )}
+
+        <Modal
+          isOpen={isRecommendationModalOpen}
+          onClose={handleCloseRecommendationModal}
+          title="Add Recommendation"
+        >
+          <form
+            onSubmit={handleAddRecommendation}
+            className="flex flex-col gap-6"
+          >
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>Name</span>
+              <input
+                type="text"
+                required
+                value={recommendationName}
+                onChange={(event) => setRecommendationName(event.target.value)}
+                placeholder="The Pizza Place"
+                className={RECOMMENDATION_FIELD_CLASSES}
+              />
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>Category</span>
+              <select
+                value={recommendationCategory}
+                onChange={(event) =>
+                  setRecommendationCategory(event.target.value)
+                }
+                className={RECOMMENDATION_FIELD_CLASSES}
+              >
+                {RECOMMENDATION_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>
+                Description
+              </span>
+              <textarea
+                required
+                rows={3}
+                value={recommendationDescription}
+                onChange={(event) =>
+                  setRecommendationDescription(event.target.value)
+                }
+                placeholder="Great for groups, ask for the back patio."
+                className={`${RECOMMENDATION_FIELD_CLASSES} resize-none`}
+              />
+            </label>
+
+            <label className="block">
+              <span className={RECOMMENDATION_LABEL_CLASSES}>
+                Link (Optional)
+              </span>
+              <input
+                type="url"
+                value={recommendationLink}
+                onChange={(event) => setRecommendationLink(event.target.value)}
+                placeholder="https://..."
+                className={RECOMMENDATION_FIELD_CLASSES}
+              />
+            </label>
+
+            {recommendationError ? (
+              <p className="text-sm text-red-600">{recommendationError}</p>
+            ) : null}
+
+            <button
+              type="submit"
+              className="mt-2 self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+            >
+              Add Recommendation
+            </button>
+          </form>
+        </Modal>
+
+        {recommendations.length === 0 ? (
+          <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+            No recommendations yet
+          </div>
+        ) : (
+          <div className="mt-10 flex flex-col gap-6">
+            {[...recommendations]
+              .sort((a, b) => a.category.localeCompare(b.category))
+              .map((entry) => {
+                if (editingRecommendationId === entry.id) {
+                  const draft = recommendationEditDraft;
+                  const field = (key: string) => draft[key] ?? "";
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex flex-col gap-6 border border-foreground/10 p-4"
+                    >
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Name
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          value={field("name")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "name",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Category
+                        </span>
+                        <select
+                          value={field("category")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "category",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        >
+                          {RECOMMENDATION_CATEGORIES.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Description
+                        </span>
+                        <textarea
+                          required
+                          rows={3}
+                          value={field("description")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "description",
+                              event.target.value
+                            )
+                          }
+                          className={`${RECOMMENDATION_FIELD_CLASSES} resize-none`}
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className={RECOMMENDATION_LABEL_CLASSES}>
+                          Link (Optional)
+                        </span>
+                        <input
+                          type="url"
+                          value={field("link")}
+                          onChange={(event) =>
+                            handleRecommendationEditDraftChange(
+                              "link",
+                              event.target.value
+                            )
+                          }
+                          className={RECOMMENDATION_FIELD_CLASSES}
+                        />
+                      </label>
+
+                      {recommendationEditError ? (
+                        <p className="text-sm text-red-600">
+                          {recommendationEditError}
+                        </p>
+                      ) : null}
+
+                      <div className="flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditRecommendation(entry)}
+                          className="self-start border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditRecommendation}
+                          className="self-start text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-start justify-between gap-4 border-b border-foreground/10 pb-6 last:border-b-0"
+                  >
+                    <div>
+                      <p className="font-serif text-lg text-foreground">
+                        {entry.name}
+                      </p>
+                      <span className="mt-1 inline-block text-xs tracking-wide text-accent uppercase">
+                        {entry.category}
+                      </span>
+                      <p className="mt-1 text-foreground/70">
+                        {entry.description}
+                      </p>
+                      {entry.link ? (
+                        <a
+                          href={entry.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Visit link
+                        </a>
+                      ) : null}
+                    </div>
+                    {isPreviewingAsGuest ? null : (
+                      <div className="flex shrink-0 items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditRecommendation(entry)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecommendation(entry.id)}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+        </>
+        )}
+      </div>
+      ) : null}
+        </>
+      ) : resolvedActiveTab === "photos" ? (
+        <>
+      <div className="mt-12 flex items-center justify-between gap-4">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("photos")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.photos} />
+            Photos
+          </button>
+        </h2>
+        <div className="flex shrink-0 items-center gap-4">
+          <Link
+            href={`/experiences/${params.id}/album`}
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            View Album
+          </Link>
+          <Link
+            href={`/experiences/${params.id}/keepsake`}
+            className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+          >
+            View Keepsake
+          </Link>
+        </div>
+      </div>
+
+        {collapsedSections.photos ? null : (
+          <>
+            {isPreviewingAsGuest ? null : (
+              <div className="mt-6">
+                <label className="inline-block border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                  Upload Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
+
+            {isPreviewingAsGuest || !photoUploadError ? null : (
+              <p className="mt-3 text-sm text-red-600">{photoUploadError}</p>
+            )}
+
+            <datalist id="photo-tag-name-options">
+              {guests.map((guest) => (
+                <option key={guest.id} value={guest.name} />
+              ))}
+            </datalist>
+
+            {photos.length === 0 ? (
+              <div className="flex min-h-[15vh] items-center justify-center text-center font-serif text-lg text-muted italic">
+                No photos yet
+              </div>
+            ) : (
+              <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {photos.map((photo) => (
+                  <div key={photo.id}>
+                    <div className="aspect-square w-full overflow-hidden bg-foreground/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.dataUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted">
+                        {formatRelativeTime(photo.timestamp)}
+                      </p>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <a
+                          href={photo.dataUrl}
+                          download={getPhotoDownloadFilename(
+                            experience.name,
+                            photo
+                          )}
+                          className="text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Download
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePhoto(photo.id)}
+                          className="text-xs text-foreground/30 underline underline-offset-2 transition-colors hover:text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    {taggingPhotoId === photo.id ? null : photo.taggedNames
+                        .length > 0 ? (
+                      <p className="text-xs text-muted">
+                        with {photo.taggedNames.join(", ")}
+                      </p>
+                    ) : null}
+
+                    {taggingPhotoId === photo.id ? (
+                      <div className="mt-1 flex flex-col gap-2">
+                        {photo.taggedNames.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {photo.taggedNames.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center gap-1 border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-wide text-accent uppercase"
+                              >
+                                {name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRemovePhotoTagNow(photo.id, name)
+                                  }
+                                  aria-label={`Remove ${name}`}
+                                  className="text-accent/70 hover:text-accent"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            list="photo-tag-name-options"
+                            value={photoTagInputValue}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setPhotoTagInputValue(value);
+
+                              const isKnownGuest = guests.some(
+                                (guest) => guest.name === value
+                              );
+                              if (isKnownGuest) {
+                                handleAddPhotoTagNow(photo.id, value);
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleAddPhotoTagNow(
+                                  photo.id,
+                                  photoTagInputValue
+                                );
+                              }
+                            }}
+                            placeholder="Name"
+                            className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCloseTagPhoto}
+                            className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartTagPhoto(photo.id)}
+                        className="mt-1 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        Tag someone
+                      </button>
+                    )}
+
+                    {linkingPhotoId === photo.id ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <select
+                          value={photo.itineraryItemId ?? ""}
+                          onChange={(event) =>
+                            handleSelectPhotoItineraryItem(
+                              photo.id,
+                              event.target.value
+                            )
+                          }
+                          className="w-full border-b border-foreground/10 bg-transparent pb-1 text-sm text-foreground focus:border-accent focus:outline-none"
+                        >
+                          <option value="">No link</option>
+                          {itineraryItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.title} — {formatShortDate(item.date)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleCloseLinkPhoto}
+                          className="shrink-0 text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartLinkPhoto(photo.id)}
+                        className="mt-1 block text-xs text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                      >
+                        {(() => {
+                          const linkedItem = photo.itineraryItemId
+                            ? itineraryItems.find(
+                                (item) => item.id === photo.itineraryItemId
+                              )
+                            : null;
+                          return linkedItem
+                            ? `Linked: ${linkedItem.title} — ${formatShortDate(
+                                linkedItem.date
+                              )}`
+                            : "Link to a moment";
+                        })()}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+      {experience.reflectionsEnabled ? (
+      <div className="mt-12">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-serif text-2xl text-foreground">
+            <button
+              type="button"
+              onClick={() => toggleSection("reflections")}
+              className="flex items-center gap-2 text-left"
+            >
+              <ChevronIcon collapsed={!!collapsedSections.reflections} />
+              Reflections
+            </button>
+          </h2>
+          {isPreviewingAsGuest ? null : (
+            <button
+              type="button"
+              onClick={handleToggleReflectionsEnabled}
+              className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+            >
+              Turn Off Reflections
+            </button>
+          )}
+        </div>
+
+        {collapsedSections.reflections ? null : (
+          <>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={handleOpenNewReflectionModal}
+                className="shrink-0 border border-accent px-5 py-2 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                Share a Reflection
+              </button>
+            </div>
+
+            <Modal
+              isOpen={isReflectionModalOpen}
+              onClose={handleCloseReflectionModal}
+              title={editingReflectionId ? "Edit Reflection" : "Share a Reflection"}
+              maxWidthClassName="max-w-2xl"
+            >
+            <form
+              onSubmit={handleSubmitReflection}
+              className="flex flex-col gap-6"
+            >
+              <div className="flex flex-col gap-2">
+                <span className={REFLECTION_LABEL_CLASSES}>Prompt</span>
+                <div className="flex flex-col gap-2">
+                  {REFLECTION_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt.id}
+                      type="button"
+                      onClick={() => setReflectionPromptId(prompt.id)}
+                      className={`border px-4 py-3 text-left text-sm leading-snug transition-colors ${
+                        reflectionPromptId === prompt.id
+                          ? "border-accent bg-accent/5 text-foreground"
+                          : "border-foreground/10 text-muted hover:border-accent hover:text-foreground"
+                      }`}
+                    >
+                      {prompt.text ?? "Write your own..."}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {reflectionPromptId === OPEN_ENDED_REFLECTION_PROMPT_ID ? (
+                <label className="block">
+                  <span className={REFLECTION_LABEL_CLASSES}>Your Prompt</span>
+                  <input
+                    type="text"
+                    value={reflectionCustomPromptText}
+                    onChange={(event) =>
+                      setReflectionCustomPromptText(event.target.value)
+                    }
+                    placeholder="What do you want to reflect on?"
+                    className={REFLECTION_FIELD_CLASSES}
+                  />
+                </label>
+              ) : null}
+
+              <label className="block">
+                <span className={REFLECTION_LABEL_CLASSES}>
+                  Your Reflection ({reflectionResponseText.length}/
+                  {reflectionPhoto
+                    ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+                    : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO}
+                  )
+                </span>
+                <textarea
+                  value={reflectionResponseText}
+                  onChange={(event) =>
+                    setReflectionResponseText(event.target.value)
+                  }
+                  maxLength={
+                    reflectionPhoto
+                      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+                      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO
+                  }
+                  rows={3}
+                  placeholder="Share your reflection..."
+                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                />
+              </label>
+
+              <div className="flex flex-col gap-3">
+                <span className={REFLECTION_LABEL_CLASSES}>Photo (Optional)</span>
+                <div className="flex items-center gap-4">
+                  {reflectionPhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={reflectionPhoto}
+                      alt=""
+                      className="h-20 w-32 object-cover"
+                    />
+                  ) : null}
+                  <label className="inline-block cursor-pointer border border-accent px-5 py-2 text-center text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background">
+                    {reflectionPhoto ? "Replace Photo" : "Add Photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReflectionPhotoFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {reflectionPhoto ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Only the original photo of a reflection under
+                        // edit is spared here — it's still referenced by
+                        // the persisted entry until the edit is saved (see
+                        // handleSubmitReflection), so removing it in the
+                        // form must not delete it from Storage yet.
+                        if (reflectionPhoto !== reflectionOriginalPhoto) {
+                          void deleteExperiencePhoto(reflectionPhoto);
+                        }
+                        setReflectionPhoto("");
+                      }}
+                      className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {reflectionPhotoError ? (
+                  <p className="text-sm text-red-600">
+                    {reflectionPhotoError}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className={REFLECTION_LABEL_CLASSES}>Tag Someone (Optional)</span>
+                {reflectionTaggedGuests.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {reflectionTaggedGuests.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 border border-accent/30 bg-accent/5 px-2 py-0.5 text-xs tracking-wide text-accent uppercase"
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReflectionTag(name)}
+                          aria-label={`Remove ${name}`}
+                          className="text-accent/70 hover:text-accent"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <input
+                  type="text"
+                  list="reflection-tag-name-options"
+                  value={reflectionTagInput}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setReflectionTagInput(value);
+
+                    const isKnownGuest = guests.some(
+                      (guest) => guest.name === value
+                    );
+                    if (isKnownGuest) handleAddReflectionTag(value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddReflectionTag(reflectionTagInput);
+                    }
+                  }}
+                  placeholder="Name"
+                  className={REFLECTION_FIELD_CLASSES}
+                />
+                <datalist id="reflection-tag-name-options">
+                  {guests.map((guest) => (
+                    <option key={guest.id} value={guest.name} />
+                  ))}
+                </datalist>
+              </div>
+
+              {reflectionError ? (
+                <p className="text-sm text-red-600">{reflectionError}</p>
+              ) : null}
+
+              <button
+                type="submit"
+                className="self-start border border-accent px-6 py-3 text-sm tracking-wide text-accent uppercase transition-colors hover:bg-accent hover:text-background"
+              >
+                {editingReflectionId ? "Save Changes" : "Submit Reflection"}
+              </button>
+            </form>
+            </Modal>
+
+            {reflections.length === 0 ? (
+              <p className="mt-10 text-center font-serif text-lg text-muted italic">
+                No reflections yet
+              </p>
+            ) : (
+              <div className="mt-10 columns-1 gap-8 sm:columns-2 lg:columns-3">
+                {reflections.map((reflection) => (
+                  <div key={reflection.id} className="mb-8 break-inside-avoid">
+                    <PolaroidCard
+                      reflection={reflection}
+                      onExpand={setExpandedReflection}
+                      canEdit={myReflectionIds.includes(reflection.id)}
+                      onEdit={handleOpenEditReflectionModal}
+                      onDelete={
+                        isPreviewingAsGuest ? undefined : handleHideReflection
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <PolaroidExpandModal
+              reflection={expandedReflection}
+              onClose={() => setExpandedReflection(null)}
+            />
+          </>
+        )}
+      </div>
+      ) : !isPreviewingAsGuest ? (
+        <div className="mt-12 flex items-center gap-3">
+          <p className="text-sm text-muted">Reflections aren&apos;t open yet</p>
+          <button
+            type="button"
+            onClick={handleToggleReflectionsEnabled}
+            className="text-sm text-accent underline underline-offset-2 transition-colors hover:text-accent/80"
+          >
+            Enable Reflections
+          </button>
+        </div>
+      ) : null}
+        </>
+      ) : resolvedActiveTab === "notes" ? (
+        <>
+      {!isPreviewingAsGuest && (
+      <>
+      <div className="mt-12 flex items-center justify-between gap-4">
+        <h2 className="font-serif text-2xl text-foreground">
+          <button
+            type="button"
+            onClick={() => toggleSection("notes")}
+            className="flex items-center gap-2 text-left"
+          >
+            <ChevronIcon collapsed={!!collapsedSections.notes} />
+            Notes to Self
+          </button>
+        </h2>
+        <span
+          className={`text-xs tracking-wide text-accent uppercase transition-opacity ${
+            showSaved ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          Saved
+        </span>
+      </div>
+
+      {collapsedSections.notes ? null : (
+        <>
+          <p className="mt-1 text-sm text-muted italic">
+            Jot down your private notes from this Experience so you can
+            revisit them later
+          </p>
+
+          <div className="note-editor mt-4">
+            <ReactQuill
+              theme="snow"
+              value={note}
+              onChange={(value) => handleNoteChange(value)}
+              modules={NOTE_TOOLBAR_MODULES}
+              formats={NOTE_FORMATS}
+              placeholder="Jot down private notes about this experience..."
+            />
+          </div>
+        </>
+      )}
+      </>
+      )}
         </>
       ) : (
         <>

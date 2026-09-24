@@ -93,6 +93,24 @@ export async function setPollOpen(pollId, isOpen) {
   return rowToPoll(data);
 }
 
+// Hard delete — the poll's votes live in its own jsonb column, so removing
+// the row removes them too. Also prunes this browser's voted-polls flag
+// for it, since that per-browser record would otherwise be orphaned.
+// Returns true on success so the caller only drops it from the UI when the
+// row is actually gone.
+export async function deletePoll(pollId) {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.from(TABLE_NAME).delete().eq("id", pollId);
+
+  if (error) {
+    console.error("[pollsStore] deletePoll failed:", error);
+    return false;
+  }
+
+  writeVotedPollIds(readVotedPollIds().filter((id) => id !== pollId));
+  return true;
+}
+
 // Reads the poll's current votes, increments the given option, and writes
 // the whole object back — not a true atomic increment (see module
 // comment), but matches how contended writes are already handled

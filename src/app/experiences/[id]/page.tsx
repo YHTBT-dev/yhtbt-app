@@ -24,6 +24,7 @@ import {
   getPolls,
   getVotedPollIds,
   markPollVoted,
+  deletePoll,
   recordVote,
   setPollOpen,
 } from "@/data/pollsStore";
@@ -925,6 +926,16 @@ export default function ExperienceDetailPage() {
     );
     markPollVoted(pollId);
     setVotedPollIds((current) => [...current, pollId]);
+  }
+
+  async function handleDeletePoll(pollId: number) {
+    if (!window.confirm("Delete this poll?")) return;
+
+    const deleted = await deletePoll(pollId);
+    if (!deleted) return;
+
+    setPolls((current) => current.filter((poll) => poll.id !== pollId));
+    setVotedPollIds((current) => current.filter((id) => id !== pollId));
   }
 
   async function handleTogglePollOpen(pollId: number, nextIsOpen: boolean) {
@@ -2533,15 +2544,24 @@ export default function ExperienceDetailPage() {
                           ) : null}
                         </p>
                         {isPreviewingAsGuest ? null : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleTogglePollOpen(poll.id, !poll.isOpen)
-                            }
-                            className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-                          >
-                            {poll.isOpen ? "Close Poll" : "Reopen Poll"}
-                          </button>
+                          <div className="flex shrink-0 items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleTogglePollOpen(poll.id, !poll.isOpen)
+                              }
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+                            >
+                              {poll.isOpen ? "Close Poll" : "Reopen Poll"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoll(poll.id)}
+                              className="text-sm text-muted underline underline-offset-2 transition-colors hover:text-red-600"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         )}
                       </div>
                       <div className="mt-4 flex flex-col gap-3">
