@@ -1,3 +1,4 @@
+import { getMentions } from "@/lib/mentions";
 import { getSupabaseClient } from "@/lib/supabase";
 
 const TABLE_NAME = "updates";
@@ -9,11 +10,16 @@ const TABLE_NAME = "updates";
 // the database itself (default now()) rather than the browser's clock —
 // more reliable, and "newest first" sorting is just an order() on it.
 
+// "mentions" is derived, not a column: tagged guests are stored inline in
+// message as "@[Name](guest:<id>)" tokens (see @/lib/mentions), and
+// surfaced here as [{ guestId, name }] for anything that needs who was
+// tagged without rendering the text.
 function rowToUpdate(row) {
   return {
     id: row.id,
     experienceId: String(row.experience_id),
     message: row.message,
+    mentions: getMentions(row.message),
     timestamp: row.created_at,
   };
 }

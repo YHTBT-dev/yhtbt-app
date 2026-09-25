@@ -25,6 +25,14 @@ import {
   updateTravelDetail,
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
+import MentionInput from "@/components/MentionInput";
+import {
+  EMPTY_MENTION_DRAFT,
+  parseMessage,
+  serializeMentionDraft,
+  type Mention,
+  type MentionDraft,
+} from "@/lib/mentions";
 import { addFaq, getFaqs, updateFaq } from "@/data/faqsStore";
 import { getSuggestedFaqQuestions } from "@/data/suggestedFaqs";
 import {
@@ -220,7 +228,9 @@ type BookOrder = {
 type Update = {
   id: number;
   experienceId: string;
+  // Mentions are stored inline in message — see @/lib/mentions.
   message: string;
+  mentions: Mention[];
   timestamp: string;
 };
 
@@ -685,7 +695,8 @@ export default function ExperienceDetailPage() {
   // viewer's role instead.
   const isGuestView = !isUnlocked;
   const [updates, setUpdates] = useState<Update[]>([]);
-  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateDraft, setUpdateDraft] =
+    useState<MentionDraft>(EMPTY_MENTION_DRAFT);
   const [updateError, setUpdateError] = useState("");
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [guestAddedNotice, setGuestAddedNotice] = useState("");
@@ -1656,11 +1667,11 @@ export default function ExperienceDetailPage() {
     try {
       const newUpdate = await addUpdate({
         experienceId: params.id,
-        message: updateMessage,
+        message: serializeMentionDraft(updateDraft),
       });
 
       setUpdates((current) => [newUpdate, ...current]);
-      setUpdateMessage("");
+      setUpdateDraft(EMPTY_MENTION_DRAFT);
       setUpdateError("");
     } catch {
       setUpdateError("Could not post this update. Please try again.");
@@ -3791,13 +3802,18 @@ export default function ExperienceDetailPage() {
                 <span className="text-sm tracking-wide text-muted uppercase">
                   New Update
                 </span>
-                <input name="updateMessage" autoComplete="off"
-                  type="text"
+                {/* Same guest list Photos and Travel Details tag from,
+                    minus anyone who declined. */}
+                <MentionInput
+                  name="updateMessage"
                   required
-                  value={updateMessage}
-                  onChange={(event) => setUpdateMessage(event.target.value)}
-                  placeholder="The dinner start time moved to 7pm..."
-                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                  value={updateDraft}
+                  onChange={setUpdateDraft}
+                  guests={guests.filter(
+                    (guest) => guest.rsvpStatus !== "declined"
+                  )}
+                  placeholder="The dinner start time moved to 7pm... type @ to mention a guest"
+                  className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
                 />
               </label>
 
@@ -3826,7 +3842,18 @@ export default function ExperienceDetailPage() {
                     className="border-b border-foreground/10 pb-8 last:border-b-0"
                   >
                     <p className="font-serif text-lg text-foreground">
-                      {update.message}
+                      {parseMessage(update.message).map((segment, index) =>
+                        segment.type === "mention" ? (
+                          <span
+                            key={index}
+                            className="font-semibold text-accent"
+                          >
+                            @{segment.name}
+                          </span>
+                        ) : (
+                          segment.text
+                        )
+                      )}
                     </p>
                     <p className="mt-1 text-sm text-foreground/60">
                       {formatRelativeTime(update.timestamp)}
