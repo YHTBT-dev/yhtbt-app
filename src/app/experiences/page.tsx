@@ -373,10 +373,18 @@ export default function ExperiencesPage() {
                 ) : null}
               </div>
               <div className="pt-4">
-                <p className="font-serif text-lg text-foreground transition-colors group-hover:text-accent">
+                <p
+                  className={`font-serif text-lg transition-colors group-hover:text-accent ${
+                    isPast ? "text-foreground/70" : "text-foreground"
+                  }`}
+                >
                   {experience.name}
                 </p>
-                <p className="mt-1 text-sm text-foreground/60">
+                <p
+                  className={`mt-1 text-sm ${
+                    isPast ? "text-foreground/50" : "text-foreground/60"
+                  }`}
+                >
                   {formatDateRange(experience.startDate, experience.endDate)}
                 </p>
               </div>
@@ -386,7 +394,12 @@ export default function ExperiencesPage() {
         </div>
       ) : (
         <div className="mt-10 flex flex-col divide-y divide-foreground/10 border-t border-b border-foreground/10">
-          {filteredExperiences.map((experience) => (
+          {filteredExperiences.map((experience) => {
+            const isPast =
+              computeExperiencePhase(experience.startDate, experience.endDate) ===
+              "after";
+
+            return (
             <Link
               key={experience.id}
               href={`/experiences/${experience.id}`}
@@ -400,27 +413,49 @@ export default function ExperiencesPage() {
                   style={{
                     objectPosition: `${experience.coverPositionX ?? 50}% ${experience.coverPositionY ?? 50}%`,
                   }}
-                  className="h-full w-full object-cover"
+                  className={`h-full w-full object-cover ${
+                    isPast ? "[filter:saturate(0.4)]" : ""
+                  }`}
                 />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate font-serif text-base text-foreground transition-colors group-hover:text-accent">
+                  <p
+                    className={`truncate font-serif text-base transition-colors group-hover:text-accent ${
+                      isPast ? "text-foreground/70" : "text-foreground"
+                    }`}
+                  >
                     {experience.name}
                   </p>
+                  {isPast ? (
+                    // Small tag instead of the grid's corner ribbon, which
+                    // wouldn't read at thumbnail size. Same accent as the
+                    // ribbon: this Experience's own theme.
+                    <span
+                      data-theme={experience.theme}
+                      className="shrink-0 bg-accent px-1.5 py-0.5 text-[10px] font-medium tracking-widest text-background uppercase"
+                    >
+                      YHTBT!
+                    </span>
+                  ) : null}
                   {experience.id === upNextExperienceId ? (
                     <span className="shrink-0 border border-accent/30 bg-background px-1.5 py-0.5 text-[10px] tracking-widest text-accent uppercase">
                       Up Next
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-0.5 truncate text-xs text-foreground/60">
+                <p
+                  className={`mt-0.5 truncate text-xs ${
+                    isPast ? "text-foreground/50" : "text-foreground/60"
+                  }`}
+                >
                   {formatDateRange(experience.startDate, experience.endDate)}
                   {experience.location ? ` · ${experience.location}` : ""}
                 </p>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </main>
