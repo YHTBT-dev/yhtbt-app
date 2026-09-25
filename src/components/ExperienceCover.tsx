@@ -212,9 +212,15 @@ export default function ExperienceCover({
         } ${isRepositioning ? "pointer-events-none" : ""}`}
       >
         <div className="flex items-stretch gap-4">
-          <span className="self-center font-serif text-sm tracking-[0.25em] uppercase">
+          {/* Same destination as the sticky header's YHTBT link. The
+              header's hover (accent color) can vanish against a photo, so
+              this fades and underlines instead; active: covers taps. */}
+          <Link
+            href="/experiences"
+            className="self-center font-serif text-sm tracking-[0.25em] uppercase underline-offset-4 transition-opacity hover:underline hover:opacity-75 focus-visible:underline active:opacity-60"
+          >
             YHTBT
-          </span>
+          </Link>
           {hostName ? (
             <>
               <span
