@@ -67,13 +67,12 @@ import {
 } from "@/data/recommendationsStore";
 import Modal from "@/components/Modal";
 import RenderErrorBoundary from "@/components/RenderErrorBoundary";
-import RepositionableCover from "@/components/RepositionableCover";
+import ExperienceCover from "@/components/ExperienceCover";
 import ThemePicker from "@/components/ThemePicker";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import {
   addDaysToLocalDateString,
   formatDateHeading,
-  formatDateRange,
   formatLocalDateString,
   formatRelativeTime,
   formatShortDate,
@@ -169,6 +168,7 @@ type Experience = {
   roles: string[];
   reflectionsEnabled: boolean;
   showAttendeeCount?: boolean;
+  createdBy?: string;
   coverPositionX?: number;
   coverPositionY?: number;
   experienceType?: string;
@@ -1582,6 +1582,34 @@ export default function ExperienceDetailPage() {
     }
   }
 
+  // Compressed, uploaded to Supabase Storage (same bucket as photos), then
+  // saved as the cover with the focal point reset to center. Throws on
+  // failure so the cover can show its own error.
+  async function handleChangeCoverImage(file: File) {
+    if (!experience) return;
+
+    const blob = await compressImageToBlob(file);
+    const url = await uploadExperiencePhoto(String(experience.id), blob);
+    const updated = await updateExperience(experience.id, {
+      coverImage: url,
+      coverPositionX: 50,
+      coverPositionY: 50,
+    });
+    if (!updated) throw new Error("Could not save the new cover image");
+
+    setCoverImageError(false);
+    setExperience((current) =>
+      current
+        ? {
+            ...current,
+            coverImage: url,
+            coverPositionX: 50,
+            coverPositionY: 50,
+          }
+        : current
+    );
+  }
+
   async function handleSaveCoverPosition(x: number, y: number) {
     if (!experience) return false;
 
@@ -2240,25 +2268,33 @@ export default function ExperienceDetailPage() {
         </div>
       ) : null}
 
-      {experience.coverImage && !coverImageError ? (
-        <RepositionableCover
-          src={experience.coverImage}
-          alt={experience.name}
-          x={experience.coverPositionX ?? 50}
-          y={experience.coverPositionY ?? 50}
-          canEdit={!isGuestView}
-          onSave={handleSaveCoverPosition}
-          onError={() => setCoverImageError(true)}
-        />
-      ) : (
-        <div className="relative h-64 w-full overflow-hidden sm:h-80">
-          <div className="h-full w-full bg-gradient-to-br from-accent/15 via-background to-accent/5" />
-        </div>
-      )}
+      <ExperienceCover
+        imageUrl={coverImageError ? "" : experience.coverImage}
+        title={experience.name}
+        startDate={experience.startDate}
+        endDate={experience.endDate}
+        location={experience.location}
+        hostName={experience.createdBy}
+        // "of us were there" only makes sense once it's over; guests see the
+        // number only if the host turned the attendee count on.
+        attendeeCount={
+          phase === "after" && (!isGuestView || experience.showAttendeeCount)
+            ? guests.filter((guest) => guest.rsvpStatus === "confirmed").length
+            : undefined
+        }
+        theme={experience.theme}
+        focalX={experience.coverPositionX ?? 50}
+        focalY={experience.coverPositionY ?? 50}
+        canEdit={!isGuestView}
+        editHref={`/experiences/${params.id}/edit`}
+        onChangeImage={handleChangeCoverImage}
+        onSaveFocalPoint={handleSaveCoverPosition}
+        onImageError={() => setCoverImageError(true)}
+      />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
       <div
-        className={`sticky top-0 z-10 bg-background pb-4 transition-shadow duration-200 ${
+        className={`sticky top-0 z-10 bg-background py-3 transition-shadow duration-200 ${
           isScrolled
             ? "border-b border-foreground/10 shadow-sm"
             : "border-b border-transparent"
@@ -2300,24 +2336,6 @@ export default function ExperienceDetailPage() {
             </button>
           </div>
         </div>
-
-        <div className="mt-3 flex items-baseline gap-3">
-          <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
-            {experience.name}
-          </h1>
-          {isGuestView ? null : (
-            <Link
-              href={`/experiences/${params.id}/edit`}
-              className="shrink-0 text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-            >
-              Edit Experience
-            </Link>
-          )}
-        </div>
-        <p className="mt-2 text-sm text-foreground/60">
-          {formatDateRange(experience.startDate, experience.endDate)}
-          {experience.location ? ` · ${experience.location}` : ""}
-        </p>
       </div>
 
       <RenderErrorBoundary label="experience-tabs">
