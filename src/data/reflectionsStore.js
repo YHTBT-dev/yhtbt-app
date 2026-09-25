@@ -1,3 +1,4 @@
+import { getMentions } from "@/lib/mentions";
 import { deleteExperiencePhoto, getSupabaseClient } from "@/lib/supabase";
 
 const TABLE_NAME = "reflections";
@@ -56,6 +57,9 @@ function rowToReflection(row) {
     promptId: row.prompt_id,
     promptText: row.prompt_text,
     responseText: row.response_text,
+    // Derived from @mention tokens inline in response_text (see
+    // @/lib/mentions) — separate from taggedGuests, the "with …" tags.
+    mentions: getMentions(row.response_text),
     photo: row.photo ?? null,
     guestName: row.guest_name ?? "",
     taggedGuests: row.tagged_guests ?? [],

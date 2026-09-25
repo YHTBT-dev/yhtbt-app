@@ -24,7 +24,11 @@ export default function Modal({
     if (!isOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      // Something inside the modal (e.g. MentionInput closing its
+      // dropdown) already handled this Escape — preventDefault is the
+      // signal. stopPropagation can't be: in the App Router React's own
+      // listener sits on document too, the same node as this one.
+      if (event.key === "Escape" && !event.defaultPrevented) onClose();
     }
 
     document.addEventListener("keydown", handleKeyDown);

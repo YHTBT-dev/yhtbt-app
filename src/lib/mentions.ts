@@ -9,7 +9,10 @@
 // can change or repeat. Messages posted before mentions existed contain
 // no tokens and parse as a single plain-text segment.
 //
-// While editing, the text is kept "display" form ("@Jamie B") with the
+// A mention displays as just the name ("Jamie B") — the "@" is only how
+// it's triggered while typing, never shown once it's a mention.
+//
+// While editing, the text is kept "display" form ("Jamie B") with the
 // mention ranges tracked alongside it, and only serialized to the stored
 // form on submit — see MentionInput.
 
@@ -18,7 +21,7 @@ export type Mention = {
   name: string;
 };
 
-// A mention's position in display text: [start, end) covers "@Name".
+// A mention's position in display text: [start, end) covers "Name".
 export type MentionRange = Mention & {
   start: number;
   end: number;
@@ -76,6 +79,58 @@ export function parseMessage(message: string): MessageSegment[] {
   return segments;
 }
 
+// The reverse of serializeMentionDraft: turns a stored message back into
+// editable display text plus mention ranges (editing a saved Reflection).
+export function draftFromMessage(message: string): MentionDraft {
+  let text = "";
+  const mentions: MentionRange[] = [];
+  for (const segment of parseMessage(message)) {
+    if (segment.type === "text") {
+      text += segment.text;
+    } else {
+      mentions.push({
+        guestId: segment.guestId,
+        name: segment.name,
+        start: text.length,
+        end: text.length + segment.name.length,
+      });
+      text += segment.name;
+    }
+  }
+  return { text, mentions };
+}
+
+// Cuts parsed segments to at most maxLength characters of DISPLAY text
+// ("Jamie B", not the longer stored token), for previews like a
+// polaroid card. A mention that would straddle the cut is left out
+// whole rather than shown half-rendered.
+export function truncateSegments(
+  segments: MessageSegment[],
+  maxLength: number
+): { segments: MessageSegment[]; isTruncated: boolean } {
+  const result: MessageSegment[] = [];
+  let remaining = maxLength;
+  for (const segment of segments) {
+    const length =
+      segment.type === "text" ? segment.text.length : segment.name.length;
+    if (length <= remaining) {
+      result.push(segment);
+      remaining -= length;
+      continue;
+    }
+    if (segment.type === "text" && remaining > 0) {
+      result.push({ type: "text", text: segment.text.slice(0, remaining) });
+    }
+    const last = result[result.length - 1];
+    if (last?.type === "text") {
+      result[result.length - 1] = { type: "text", text: last.text.trimEnd() };
+    }
+    result.push({ type: "text", text: "…" });
+    return { segments: result, isTruncated: true };
+  }
+  return { segments: result, isTruncated: false };
+}
+
 export function getMentions(message: string): Mention[] {
   return parseMessage(message).flatMap((segment) =>
     segment.type === "mention"
@@ -88,7 +143,7 @@ export function getMentions(message: string): Mention[] {
 // The edited span is found by trimming the common suffix and prefix of
 // the old and new text: mentions wholly before it stay put, mentions
 // wholly after it shift by the length change, and any mention the edit
-// touched (e.g. backspacing into "@Jamie B") is dropped — its characters
+// touched (e.g. backspacing into "Jamie B") is dropped — its characters
 // remain as ordinary text rather than a half-broken mention.
 //
 // The caret (where the input's cursor sits after the edit) always marks

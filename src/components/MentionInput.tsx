@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ChangeEvent,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -30,7 +31,15 @@ type MentionInputProps = {
   required?: boolean;
   name?: string;
   className?: string;
+  // A wrapping <textarea> (Enter adds a line break unless the dropdown
+  // is open) instead of a single-line <input>.
+  multiline?: boolean;
+  rows?: number;
+  // Counts display text ("Jamie B"), not the longer stored form.
+  maxLength?: number;
 };
+
+type TextField = HTMLInputElement | HTMLTextAreaElement;
 
 type ActiveQuery = { atIndex: number; query: string };
 type DropdownPosition = { top: number; left: number };
@@ -73,7 +82,7 @@ function getActiveQuery(
   }
 
   const query = text.slice(atIndex + 1, caret);
-  if (query.length > MAX_QUERY_LENGTH || /^\s/.test(query)) return null;
+  if (query.length > MAX_QUERY_LENGTH || /^\s|\n/.test(query)) return null;
   return { atIndex, query };
 }
 
@@ -87,10 +96,11 @@ function matchGuests(guests: MentionableGuest[], query: string) {
     .slice(0, MAX_SUGGESTIONS);
 }
 
-// A single-line text input with @mention autocomplete for this
+// A text field (single-line, or a textarea with multiline) with @mention autocomplete for this
 // Experience's guests. Typing "@" opens a dropdown at the caret, filtered
 // as the host keeps typing; picking a guest (click, Enter or Tab) swaps
-// the "@query" for a mention "@Jamie B" and carries on typing after it.
+// the "@query" for a mention "Jamie B" (no "@" — that's only the
+// trigger) and carries on typing after it.
 // An "@" that matches nobody is just text — no dropdown, nothing blocked.
 //
 // A native <input> can't style part of its value, so mentions are drawn
@@ -107,8 +117,11 @@ export default function MentionInput({
   required,
   name,
   className,
+  multiline = false,
+  rows,
+  maxLength,
 }: MentionInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<TextField>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const backdropTextRef = useRef<HTMLSpanElement>(null);
   const markerRef = useRef<HTMLSpanElement>(null);
@@ -134,9 +147,10 @@ export default function MentionInput({
   const isOpen = suggestions.length > 0;
   const activeIndex = Math.min(highlightedIndex, suggestions.length - 1);
 
-  // Keeps the backdrop exactly over the input's text box and scrolled the
-  // same distance when the text is wider than the field, then (if the
-  // dropdown is open) re-anchors the dropdown under the "@".
+  // Keeps the backdrop exactly over the field's text box and scrolled the
+  // same distance when the text overflows it (sideways for an input,
+  // down for a textarea), then (if the dropdown is open) re-anchors the
+  // dropdown under the "@".
   const syncBackdrop = useCallback(() => {
     const input = inputRef.current;
     const backdrop = backdropRef.current;
@@ -149,9 +163,22 @@ export default function MentionInput({
     }
     backdrop.style.top = `${input.offsetTop}px`;
     backdrop.style.left = `${input.offsetLeft}px`;
-    backdrop.style.width = `${input.offsetWidth}px`;
     backdrop.style.height = `${input.offsetHeight}px`;
-    backdropText.style.transform = `translateX(${-input.scrollLeft}px)`;
+    if (multiline) {
+      // Wrapping has to happen at the same width as the textarea's, which
+      // loses room to a scrollbar once the text overflows: clientWidth
+      // excludes it, so the backdrop gets the same content width.
+      backdrop.style.lineHeight = computed.lineHeight;
+      backdrop.style.width = `${
+        input.clientWidth +
+        parseFloat(computed.borderLeftWidth) +
+        parseFloat(computed.borderRightWidth)
+      }px`;
+      backdropText.style.transform = `translateY(${-input.scrollTop}px)`;
+    } else {
+      backdrop.style.width = `${input.offsetWidth}px`;
+      backdropText.style.transform = `translateX(${-input.scrollLeft}px)`;
+    }
 
     const marker = markerRef.current;
     if (!marker) {
@@ -164,12 +191,15 @@ export default function MentionInput({
       inputRect.left,
       Math.min(markerRect.left, inputRect.right - 224)
     );
+    // A textarea's "@" can be on any line, so the dropdown opens just
+    // under that line rather than under the whole field.
+    const top = multiline
+      ? Math.min(markerRect.bottom, inputRect.bottom)
+      : inputRect.bottom;
     setDropdownPosition((current) =>
-      current?.top === inputRect.bottom && current.left === left
-        ? current
-        : { top: inputRect.bottom, left }
+      current?.top === top && current.left === left ? current : { top, left }
     );
-  }, []);
+  }, [multiline]);
 
   useLayoutEffect(() => {
     if (pendingCaretRef.current !== null && inputRef.current) {
@@ -225,7 +255,11 @@ export default function MentionInput({
   function selectGuest(guest: MentionableGuest) {
     if (!activeQuery) return;
     const { text } = value;
-    const label = `@${guest.name}`;
+    // The "@" was only for finding the guest — the mention itself is
+    // just their name, so it replaces "@query" entirely. Trimmed, since a
+    // guest name saved with stray spaces would otherwise double up.
+    const name = guest.name.trim();
+    const label = name;
     // Adds the space after the mention unless one is already there, and
     // lands the caret after it either way so typing just carries on.
     const hasSpaceAfter = text[caret] === " ";
@@ -237,7 +271,7 @@ export default function MentionInput({
 
     const mention: MentionRange = {
       guestId: guest.id,
-      name: guest.name,
+      name,
       start: activeQuery.atIndex,
       end: activeQuery.atIndex + label.length,
     };
@@ -253,7 +287,7 @@ export default function MentionInput({
     setHighlightedIndex(0);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(event: KeyboardEvent<TextField>) {
     if (!isOpen || !activeQuery) return;
 
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -267,57 +301,80 @@ export default function MentionInput({
       event.preventDefault();
       selectGuest(suggestions[activeIndex]);
     } else if (event.key === "Escape") {
+      // Only closes the dropdown — preventDefault tells a surrounding
+      // Modal to leave this Escape alone (see Modal's keydown handler).
       event.preventDefault();
       setDismissedAtIndex(activeQuery.atIndex);
     }
   }
+
+  const fieldProps = {
+    name,
+    required,
+    maxLength,
+    autoComplete: "off",
+    value: value.text,
+    placeholder,
+    onChange: (event: ChangeEvent<TextField>) =>
+      handleChange(
+        event.target.value,
+        event.target.selectionStart ?? event.target.value.length
+      ),
+    onSelect: readCaret,
+    onScroll: syncBackdrop,
+    onKeyDown: handleKeyDown,
+    onFocus: () => {
+      setIsFocused(true);
+      readCaret();
+    },
+    onBlur: () => setIsFocused(false),
+    role: "combobox",
+    "aria-autocomplete": "list" as const,
+    "aria-expanded": isOpen,
+    "aria-controls": listboxId,
+    "aria-activedescendant": isOpen
+      ? `${listboxId}-${suggestions[activeIndex].id}`
+      : undefined,
+    // Inline rather than a text-* class so it can't lose a cascade fight
+    // with a color utility in the caller's className.
+    style: { color: "transparent" },
+    className: `relative caret-foreground ${className ?? ""}`,
+  };
 
   return (
     <div className="relative">
       <div
         ref={backdropRef}
         aria-hidden
-        className="pointer-events-none absolute flex items-center overflow-hidden border-solid border-transparent text-foreground"
+        className={`pointer-events-none absolute overflow-hidden border-solid border-transparent text-foreground ${
+          multiline ? "block" : "flex items-center"
+        }`}
       >
-        <span ref={backdropTextRef} className="shrink-0 whitespace-pre">
+        <span
+          ref={backdropTextRef}
+          className={
+            multiline
+              ? "block whitespace-pre-wrap break-words"
+              : "shrink-0 whitespace-pre"
+          }
+        >
           {renderBackdropText(value, isOpen ? activeQuery?.atIndex : undefined, markerRef)}
         </span>
       </div>
 
-      <input
-        ref={inputRef}
-        type="text"
-        name={name}
-        required={required}
-        autoComplete="off"
-        value={value.text}
-        placeholder={placeholder}
-        onChange={(event) =>
-          handleChange(
-            event.target.value,
-            event.target.selectionStart ?? event.target.value.length
-          )
-        }
-        onSelect={readCaret}
-        onScroll={syncBackdrop}
-        onKeyDown={handleKeyDown}
-        onFocus={() => {
-          setIsFocused(true);
-          readCaret();
-        }}
-        onBlur={() => setIsFocused(false)}
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={isOpen}
-        aria-controls={listboxId}
-        aria-activedescendant={
-          isOpen ? `${listboxId}-${suggestions[activeIndex].id}` : undefined
-        }
-        // Inline rather than a text-* class so it can't lose a cascade
-        // fight with a color utility in the caller's className.
-        style={{ color: "transparent" }}
-        className={`relative caret-foreground ${className ?? ""}`}
-      />
+      {multiline ? (
+        <textarea
+          ref={inputRef as RefObject<HTMLTextAreaElement>}
+          rows={rows}
+          {...fieldProps}
+        />
+      ) : (
+        <input
+          ref={inputRef as RefObject<HTMLInputElement>}
+          type="text"
+          {...fieldProps}
+        />
+      )}
 
       {isOpen && dropdownPosition ? (
         <ul

@@ -26,8 +26,10 @@ import {
 } from "@/data/travelDetailsStore";
 import { addUpdate, getUpdates } from "@/data/updatesStore";
 import MentionInput from "@/components/MentionInput";
+import MentionText from "@/components/MentionText";
 import {
   EMPTY_MENTION_DRAFT,
+  draftFromMessage,
   parseMessage,
   serializeMentionDraft,
   type Mention,
@@ -623,8 +625,19 @@ export default function ExperienceDetailPage() {
   );
   const [reflectionCustomPromptText, setReflectionCustomPromptText] =
     useState("");
-  const [reflectionResponseText, setReflectionResponseText] = useState("");
+  // Display text + @mention ranges; serialized on submit — see
+  // @/lib/mentions. Length checks use the display text, which is what
+  // the counter shows and what the textarea's maxLength enforces.
+  const [reflectionResponseDraft, setReflectionResponseDraft] =
+    useState<MentionDraft>(EMPTY_MENTION_DRAFT);
   const [reflectionPhoto, setReflectionPhoto] = useState("");
+  // Live, so the counter and the "please trim" message switch the moment
+  // a photo is added or removed.
+  const reflectionResponseMaxLength = reflectionPhoto
+    ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
+    : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO;
+  const isReflectionResponseTooLong =
+    reflectionResponseDraft.text.length > reflectionResponseMaxLength;
   const [reflectionPhotoError, setReflectionPhotoError] = useState("");
   const [reflectionTagInput, setReflectionTagInput] = useState("");
   const [reflectionTaggedGuests, setReflectionTaggedGuests] = useState<
@@ -1259,20 +1272,14 @@ export default function ExperienceDetailPage() {
       return;
     }
 
-    if (!reflectionResponseText.trim()) {
+    if (!reflectionResponseDraft.text.trim()) {
       setReflectionError("Enter a response.");
       return;
     }
 
-    const maxResponseLength = reflectionPhoto
-      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
-      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO;
-    if (reflectionResponseText.length > maxResponseLength) {
-      setReflectionError(
-        `Response must be ${maxResponseLength} characters or fewer${
-          reflectionPhoto ? " when a photo is attached" : ""
-        }.`
-      );
+    // The inline "please trim" message under the field already says why.
+    if (isReflectionResponseTooLong) {
+      setReflectionError("");
       return;
     }
 
@@ -1282,7 +1289,7 @@ export default function ExperienceDetailPage() {
       const updated = await updateReflection(editingReflectionId, {
         promptId: savedPromptId,
         promptText,
-        responseText: reflectionResponseText.trim(),
+        responseText: serializeMentionDraft(reflectionResponseDraft).trim(),
         photo: reflectionPhoto || null,
         taggedGuests: reflectionTaggedGuests,
       });
@@ -1315,7 +1322,7 @@ export default function ExperienceDetailPage() {
           experienceId: params.id,
           promptId: savedPromptId,
           promptText,
-          responseText: reflectionResponseText.trim(),
+          responseText: serializeMentionDraft(reflectionResponseDraft).trim(),
           photo: reflectionPhoto || null,
           // Unattributed for now, same as Updates — see the FUTURE note in
           // reflectionsStore.js.
@@ -1337,7 +1344,7 @@ export default function ExperienceDetailPage() {
     setReflectionOriginalPhoto("");
     setReflectionPromptId(REFLECTION_PROMPTS[0].id);
     setReflectionCustomPromptText("");
-    setReflectionResponseText("");
+    setReflectionResponseDraft(EMPTY_MENTION_DRAFT);
     setReflectionPhoto("");
     setReflectionPhotoError("");
     setReflectionTagInput("");
@@ -1362,7 +1369,7 @@ export default function ExperienceDetailPage() {
     setReflectionOriginalPhoto("");
     setReflectionPromptId(REFLECTION_PROMPTS[0].id);
     setReflectionCustomPromptText("");
-    setReflectionResponseText("");
+    setReflectionResponseDraft(EMPTY_MENTION_DRAFT);
     setReflectionPhoto("");
     setReflectionPhotoError("");
     setReflectionTagInput("");
@@ -1389,7 +1396,7 @@ export default function ExperienceDetailPage() {
         ? reflection.promptText
         : ""
     );
-    setReflectionResponseText(reflection.responseText);
+    setReflectionResponseDraft(draftFromMessage(reflection.responseText));
     setReflectionPhoto(reflection.photo ?? "");
     setReflectionOriginalPhoto(reflection.photo ?? "");
     setReflectionPhotoError("");
@@ -3842,18 +3849,7 @@ export default function ExperienceDetailPage() {
                     className="border-b border-foreground/10 pb-8 last:border-b-0"
                   >
                     <p className="font-serif text-lg text-foreground">
-                      {parseMessage(update.message).map((segment, index) =>
-                        segment.type === "mention" ? (
-                          <span
-                            key={index}
-                            className="font-semibold text-accent"
-                          >
-                            @{segment.name}
-                          </span>
-                        ) : (
-                          segment.text
-                        )
-                      )}
+                      <MentionText segments={parseMessage(update.message)} />
                     </p>
                     <p className="mt-1 text-sm text-foreground/60">
                       {formatRelativeTime(update.timestamp)}
@@ -4966,34 +4962,6 @@ export default function ExperienceDetailPage() {
                 </label>
               ) : null}
 
-              <label className="block">
-                <span className={REFLECTION_LABEL_CLASSES}>
-                  Your Reflection ({reflectionResponseText.length}/
-                  {reflectionPhoto
-                    ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
-                    : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO}
-                  )
-                </span>
-                <textarea
-                  value={reflectionResponseText}
-                  onChange={(event) =>
-                    setReflectionResponseText(event.target.value)
-                  }
-                  maxLength={
-                    reflectionPhoto
-                      ? REFLECTION_RESPONSE_MAX_LENGTH_WITH_PHOTO
-                      : REFLECTION_RESPONSE_MAX_LENGTH_WITHOUT_PHOTO
-                  }
-                  rows={3}
-                  placeholder={
-                    reflectionPromptId === NO_PROMPT_REFLECTION_CHOICE_ID
-                      ? "Share anything..."
-                      : "Share your reflection..."
-                  }
-                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
-                />
-              </label>
-
               <div className="flex flex-col gap-3">
                 <span className={REFLECTION_LABEL_CLASSES}>Photo (Optional)</span>
                 <div className="flex items-center gap-4">
@@ -5040,6 +5008,48 @@ export default function ExperienceDetailPage() {
                   </p>
                 ) : null}
               </div>
+
+              {/* Divider in the same faint rule as the field's own bottom
+                  border, so the photo choice reads as its own step. */}
+              <label className="block border-t border-foreground/10 pt-6">
+                <span className={REFLECTION_LABEL_CLASSES}>
+                  Your Reflection (
+                  <span className={isReflectionResponseTooLong ? "text-red-600" : undefined}>
+                    {reflectionResponseDraft.text.length}/{reflectionResponseMaxLength}
+                  </span>
+                  )
+                </span>
+                {/* @mentions are separate from the "Tag" field below:
+                    a mention is inline in the words, tags are the
+                    card's "with …" line. Neither adds to the other. */}
+                <MentionInput
+                  multiline
+                  value={reflectionResponseDraft}
+                  onChange={setReflectionResponseDraft}
+                  guests={guests.filter(
+                    (guest) => guest.rsvpStatus !== "declined"
+                  )}
+                  maxLength={reflectionResponseMaxLength}
+                  rows={3}
+                  placeholder={
+                    reflectionPromptId === NO_PROMPT_REFLECTION_CHOICE_ID
+                      ? "Share anything... type @ to mention someone"
+                      : "Share your reflection... type @ to mention someone"
+                  }
+                  className="mt-2 w-full resize-none border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                />
+                {/* Adding a photo lowers the limit, but never cuts what's
+                    already written — the text stays as-is and this asks
+                    for it to be trimmed (submit is blocked until then;
+                    the textarea's maxLength still allows deleting). */}
+                {isReflectionResponseTooLong ? (
+                  <span className="mt-2 block text-sm text-red-600">
+                    {reflectionPhoto
+                      ? `Photos require a shorter response — please trim to ${reflectionResponseMaxLength} characters`
+                      : `Please trim your response to ${reflectionResponseMaxLength} characters`}
+                  </span>
+                ) : null}
+              </label>
 
               <div className="flex flex-col gap-2">
                 <span className={REFLECTION_LABEL_CLASSES}>Tag Someone (Optional)</span>

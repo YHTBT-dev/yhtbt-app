@@ -1,7 +1,9 @@
 "use client";
 
 import Modal from "@/components/Modal";
+import MentionText from "@/components/MentionText";
 import { formatRelativeTime } from "@/lib/format";
+import { parseMessage, truncateSegments } from "@/lib/mentions";
 
 // Fixed, non-theme-driven palette, deliberately — a polaroid's white
 // border shouldn't change with the site theme, the same way a real photo
@@ -66,10 +68,16 @@ const REFLECTION_MAIN_TRUNCATE_LENGTH = 110;
 const REFLECTION_MAIN_FONT_SIZE_PX = 22;
 const REFLECTION_MAIN_LINE_CLAMP = 6;
 
-function truncateForCard(text: string, maxLength: number) {
-  if (text.length <= maxLength) return { text, isTruncated: false };
-  return { text: text.slice(0, maxLength).trimEnd() + "…", isTruncated: true };
+// Counted in display characters, so a mention costs "Jamie B", not its
+// longer stored token, and is never cut in half (see truncateSegments).
+function truncateForCard(responseText: string, maxLength: number) {
+  return truncateSegments(parseMessage(responseText), maxLength);
 }
+
+// @mentions in the response: bold, in the polaroid's own fixed accent
+// rather than the theme's (same reasoning as the palette above). Weight
+// 700 so they still stand out against the no-photo text's 600.
+const POLAROID_MENTION_STYLE = { color: POLAROID_ACCENT, fontWeight: 700 };
 
 export type PolaroidReflection = {
   id: number;
@@ -220,7 +228,11 @@ export function PolaroidCard<T extends PolaroidReflection>({
                 overflowWrap: "break-word",
               }}
             >
-              {mainTruncated!.text}
+              <MentionText
+                segments={mainTruncated!.segments}
+                mentionClassName=""
+                mentionStyle={POLAROID_MENTION_STYLE}
+              />
             </p>
           )}
         </div>
@@ -260,7 +272,11 @@ export function PolaroidCard<T extends PolaroidReflection>({
                 overflowWrap: "break-word",
               }}
             >
-              {captionTruncated!.text}
+              <MentionText
+                segments={captionTruncated!.segments}
+                mentionClassName=""
+                mentionStyle={POLAROID_MENTION_STYLE}
+              />
             </p>
           ) : null}
           {isExpandable ? (
@@ -357,7 +373,7 @@ export function PolaroidExpandModal({
             </p>
           ) : null}
           <p className="font-serif text-lg text-foreground break-words">
-            {reflection.responseText}
+            <MentionText segments={parseMessage(reflection.responseText)} />
           </p>
           <p className="text-xs text-muted">{getAttributionLine(reflection)}</p>
         </div>
