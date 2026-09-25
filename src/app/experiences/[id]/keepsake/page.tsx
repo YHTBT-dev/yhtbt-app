@@ -15,7 +15,7 @@ import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import ItineraryTimeRange from "@/components/ItineraryTimeRange";
 import ExperienceCover from "@/components/ExperienceCover";
 import { computeExperiencePhase } from "@/lib/experiencePhase";
-import { hasCreatedExperience } from "@/lib/creatorName";
+import { claimLegacyExperiences, hasCreatedExperience } from "@/lib/creatorName";
 import {
   formatDateHeading,
   getPhotoDownloadFilename,
@@ -285,9 +285,34 @@ export default function KeepsakePage() {
 
     getExperiences().then((experiences) => {
       if (cancelled) return;
+      // Same as the Experience page: runs before setExperience so the
+      // creator check below already sees a claimed older Experience, even
+      // if this browser opens the keepsake before ever visiting that page.
+      // Safe to call from both — it only does anything once per browser.
+      console.log("[keepsake] running claimLegacyExperiences", {
+        experienceCount: experiences.length,
+      });
+      claimLegacyExperiences(experiences);
       const found = experiences.find(
         (item: Experience) => String(item.id) === params.id
       );
+      // TEMPORARY diagnostic logging (attendee-count investigation): each
+      // input to the cover's "[n] of us were there" decision. Remove once
+      // confirmed.
+      if (found) {
+        const phase = computeExperiencePhase(found.startDate, found.endDate);
+        const isCreatorBrowser = hasCreatedExperience(found.id);
+        console.log("[keepsake] attendee count decision", {
+          experienceId: found.id,
+          phase,
+          isCreatorBrowser,
+          showAttendeeCount: found.showAttendeeCount,
+          showsCount:
+            phase === "after" && (isCreatorBrowser || !!found.showAttendeeCount),
+        });
+      } else {
+        console.log("[keepsake] Experience not found", { id: params.id });
+      }
       setExperience(found ?? null);
     });
 

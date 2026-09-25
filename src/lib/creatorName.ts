@@ -77,19 +77,39 @@ export function claimLegacyExperiences(
 ): void {
   if (typeof window === "undefined") return;
 
+  // TEMPORARY diagnostic logging (keepsake attendee-count investigation)
+  // — shows which path the one-time claim takes. Remove once confirmed.
   try {
-    if (window.localStorage.getItem(LEGACY_CLAIM_DONE_STORAGE_KEY)) return;
+    if (window.localStorage.getItem(LEGACY_CLAIM_DONE_STORAGE_KEY)) {
+      console.log(
+        "[claimLegacyExperiences] skipped: already ran in this browser",
+        { createdExperienceIds: readCreatedExperienceIds() }
+      );
+      return;
+    }
     window.localStorage.setItem(LEGACY_CLAIM_DONE_STORAGE_KEY, "1");
-  } catch {
+  } catch (error) {
+    console.log("[claimLegacyExperiences] skipped: localStorage unavailable", error);
     return;
   }
 
   const storedName = window.localStorage.getItem(CREATOR_NAME_STORAGE_KEY);
-  if (!storedName) return;
+  if (!storedName) {
+    console.log(
+      `[claimLegacyExperiences] ran, claimed nothing: no "${CREATOR_NAME_STORAGE_KEY}" stored in this browser (expected in a fresh/Incognito browser)`
+    );
+    return;
+  }
 
+  const claimedIds: (number | string)[] = [];
   for (const experience of experiences) {
     if (experience.createdBy && experience.createdBy === storedName) {
       recordCreatedExperience(experience.id);
+      claimedIds.push(experience.id);
     }
   }
+  console.log(
+    `[claimLegacyExperiences] ran: claimed ${claimedIds.length} Experience(s) created_by "${storedName}"`,
+    { claimedIds, createdExperienceIds: readCreatedExperienceIds() }
+  );
 }
