@@ -185,7 +185,7 @@ export default function ExperienceCover({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className={`relative isolate h-[34rem] w-full overflow-hidden bg-accent text-white sm:h-[26rem] ${
+      className={`experience-cover relative isolate h-[34rem] w-full overflow-hidden bg-accent text-white sm:h-[26rem] ${
         isRepositioning ? "cursor-grab touch-none active:cursor-grabbing" : ""
       } ${className}`}
     >
@@ -198,15 +198,15 @@ export default function ExperienceCover({
           onError={onImageError}
           draggable={false}
           style={{ objectPosition: `${shown.x}% ${shown.y}%` }}
-          className="absolute inset-0 -z-10 h-full w-full object-cover select-none"
+          className="experience-cover-image absolute inset-0 -z-10 h-full w-full object-cover select-none"
         />
       ) : null}
 
       {/* Light overlay overall, heavier toward the bottom for the text. */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-black/20 to-black/75 [print-color-adjust:exact]" />
+      <div className="experience-cover-overlay pointer-events-none absolute inset-0 bg-gradient-to-b from-black/35 via-black/20 to-black/75 [print-color-adjust:exact]" />
 
       <div
-        className={`absolute inset-0 flex flex-col justify-between p-5 sm:p-10 ${
+        className={`experience-cover-content absolute inset-0 flex flex-col justify-between p-5 sm:p-10 ${
           // Leaves room for the host controls pinned to the bottom edge.
           canEdit ? "pb-14 sm:pb-16" : ""
         } ${isRepositioning ? "pointer-events-none" : ""}`}
@@ -217,7 +217,10 @@ export default function ExperienceCover({
           </span>
           {hostName ? (
             <>
-              <span className="w-px self-stretch bg-white/50" aria-hidden />
+              <span
+                className="experience-cover-divider w-px self-stretch bg-white/50"
+                aria-hidden
+              />
               <div className="flex flex-col justify-center">
                 <span className="text-[10px] tracking-[0.2em] text-white/80 uppercase">
                   Hosted by

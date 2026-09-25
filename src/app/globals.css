@@ -477,3 +477,57 @@ body {
     font-size: 14px !important;
   }
 }
+
+/* ExperienceCover (src/components/ExperienceCover.tsx) in print — used as
+   the keepsake's PDF first page. On screen the title/dates/location sit
+   over the photo in white, which can't work on paper: the keepsake print
+   stylesheet above forces dark ink and a white page, and white-on-photo
+   text would turn dark-on-dark. So in print the cover is re-laid-out as
+   the photo on top (no overlay) with the same text in dark ink beneath
+   it, like the rest of the PDF. These hooks are the component's own
+   (not scoped under .keepsake-print) so the same cover prints correctly
+   anywhere it's used, e.g. the printed keepsake book. !important because
+   they override Tailwind utilities on the same elements. */
+@media print {
+  .experience-cover {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .experience-cover,
+  .experience-cover * {
+    color: #1b1a17 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .experience-cover-image {
+    position: static !important;
+    display: block;
+    z-index: auto !important;
+    width: 100% !important;
+    height: 11cm !important;
+  }
+
+  .experience-cover-overlay {
+    display: none !important;
+  }
+
+  .experience-cover-content {
+    position: static !important;
+    inset: auto !important;
+    padding: 1.25rem 0 0 !important;
+    gap: 1.5rem;
+  }
+
+  .experience-cover-divider {
+    background: #c8c1b6 !important;
+  }
+
+  .experience-cover h1 {
+    font-size: 2.25rem !important;
+  }
+}

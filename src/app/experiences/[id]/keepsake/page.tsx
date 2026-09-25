@@ -13,9 +13,11 @@ import LocationAutocompleteInput from "@/components/LocationAutocompleteInput";
 import { PolaroidCard, PolaroidExpandModal } from "@/components/PolaroidCard";
 import { ItineraryTypeIcon } from "@/components/ItineraryTypeIcon";
 import ItineraryTimeRange from "@/components/ItineraryTimeRange";
+import ExperienceCover from "@/components/ExperienceCover";
+import { computeExperiencePhase } from "@/lib/experiencePhase";
+import { hasCreatedExperience } from "@/lib/creatorName";
 import {
   formatDateHeading,
-  formatDateRange,
   getPhotoDownloadFilename,
   groupByDate,
   sanitizeForFilename,
@@ -142,6 +144,10 @@ type Experience = {
   endDate: string;
   location?: string;
   theme?: string;
+  createdBy?: string;
+  showAttendeeCount?: boolean;
+  coverPositionX?: number;
+  coverPositionY?: number;
 };
 
 type ItineraryItem = {
@@ -160,6 +166,7 @@ type ItineraryItem = {
 type Guest = {
   id: number;
   name: string;
+  rsvpStatus?: string;
   everConfirmed?: boolean;
 };
 
@@ -436,73 +443,55 @@ export default function KeepsakePage() {
   const confirmedGuests = guests.filter((guest) => guest.everConfirmed);
 
   return (
-    <main className="keepsake-print mx-auto w-full max-w-4xl px-4 py-16 sm:px-8 sm:py-24">
-      <Link
-        href="/experiences"
-        className="keepsake-print-hide block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-      >
-        &larr; Back to My Experiences
-      </Link>
-      <Link
-        href={`/experiences/${params.id}`}
-        className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-      >
-        Back to {experience.name}
-      </Link>
-      <button
-        type="button"
-        onClick={() => window.print()}
-        className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
-      >
-        Download as PDF
-      </button>
-
-      {experience.coverImage && !coverImageError ? (
-        <div className="keepsake-print-cover mt-8 h-72 w-full overflow-hidden sm:h-96">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={experience.coverImage}
-            alt=""
-            onError={() => setCoverImageError(true)}
-            className="h-full w-full object-cover"
-          />
-        </div>
-      ) : null}
-
-      <div className="keepsake-print-title-block mt-12 text-center">
-        {experience.theme === "midnight-edition" ? (
-          // Midnight-Edition-only detail — a small invitation-card flourish
-          // Editorial Classic and Coastal Light don't have; see the
-          // .keepsake-eyebrow rule in globals.css.
-          <div className="mb-5 flex flex-col items-center gap-3">
-            <div className="h-px w-8 bg-foreground/25" />
-            <span className="keepsake-eyebrow text-sm text-muted">
-              A Keepsake
-            </span>
-          </div>
-        ) : null}
-        <h1 className="keepsake-print-title font-serif text-4xl text-foreground sm:text-5xl">
-          {experience.theme === "midnight-edition" ? (
-            // Optional per the original request: a noticeably larger first
-            // letter, reserved for this ceremonial page rather than every
-            // heading under this theme. Sized inline (not floated) so it
-            // stays compatible with this heading's centered alignment.
-            <>
-              <span className="text-[1.6em] leading-none">
-                {experience.name.charAt(0)}
-              </span>
-              {experience.name.slice(1)}
-            </>
-          ) : (
-            experience.name
-          )}
-        </h1>
-        <p className="keepsake-meta mt-4 text-muted">
-          {formatDateRange(experience.startDate, experience.endDate)}
-          {experience.location ? ` · ${experience.location}` : ""}
-        </p>
+    <div className="keepsake-print">
+      <div className="keepsake-print-hide mx-auto w-full max-w-4xl px-4 pt-16 pb-8 sm:px-8 sm:pt-24">
+        <Link
+          href="/experiences"
+          className="keepsake-print-hide block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          &larr; Back to My Experiences
+        </Link>
+        <Link
+          href={`/experiences/${params.id}`}
+          className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          Back to {experience.name}
+        </Link>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="keepsake-print-hide mt-1 block text-sm text-muted underline underline-offset-2 transition-colors hover:text-accent"
+        >
+          Download as PDF
+        </button>
       </div>
 
+      {/* Same cover as the Experience page, but read-only: no host controls
+          (editing belongs on the Experience page, not this presentational
+          page). The confirmed count follows the same rule as there: only
+          once it's over, and to anyone but the creator's browser only when
+          the host turned the attendee count on. */}
+      <ExperienceCover
+        imageUrl={coverImageError ? "" : experience.coverImage}
+        title={experience.name}
+        startDate={experience.startDate}
+        endDate={experience.endDate}
+        location={experience.location}
+        hostName={experience.createdBy}
+        attendeeCount={
+          computeExperiencePhase(experience.startDate, experience.endDate) ===
+            "after" &&
+          (hasCreatedExperience(experience.id) || experience.showAttendeeCount)
+            ? guests.filter((guest) => guest.rsvpStatus === "confirmed").length
+            : undefined
+        }
+        theme={experience.theme}
+        focalX={experience.coverPositionX ?? 50}
+        focalY={experience.coverPositionY ?? 50}
+        onImageError={() => setCoverImageError(true)}
+      />
+
+      <main className="mx-auto w-full max-w-4xl px-4 pb-16 sm:px-8 sm:pb-24">
       {groupedItinerary.length > 0 ? (
         <section className="keepsake-print-page-break mt-24">
           <h2 className="text-center font-serif text-2xl text-foreground">
@@ -857,6 +846,7 @@ export default function KeepsakePage() {
       >
         YHTBT
       </span>
-    </main>
+      </main>
+    </div>
   );
 }
