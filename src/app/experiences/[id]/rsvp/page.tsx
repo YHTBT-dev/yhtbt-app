@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { getExperiences } from "@/data/experiencesStore";
 import { submitRsvp } from "@/data/guestsStore";
 import { formatDateRange } from "@/lib/format";
+import { isValidPhone } from "@/lib/phone";
+import PhoneNumberInput from "@/components/PhoneNumberInput";
 
 type Experience = {
   id: number;
@@ -70,6 +72,10 @@ export default function RsvpPage() {
     }
     if (!email.trim() && !phone.trim()) {
       setError("Enter an email or a phone number.");
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
+      setError("Enter a valid phone number, or leave it blank.");
       return;
     }
 
@@ -169,18 +175,21 @@ export default function RsvpPage() {
           />
         </label>
 
-        <label className="block">
-          <span className="text-sm tracking-wide text-muted uppercase">
+        <div>
+          <label
+            htmlFor="rsvp-phone"
+            className="text-sm tracking-wide text-muted uppercase"
+          >
             Phone
-          </span>
-          <input name="phone" autoComplete="tel"
-            type="tel"
+          </label>
+          <PhoneNumberInput
+            id="rsvp-phone"
+            name="phone"
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="(555) 123-4567"
-            className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+            onChange={setPhone}
+            className="mt-2 font-serif text-lg"
           />
-        </label>
+        </div>
 
         <p className="text-sm text-muted">
           Provide an email or a phone number — at least one is required.

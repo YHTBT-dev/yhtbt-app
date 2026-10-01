@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "react-quill-new/dist/quill.snow.css";
 @import "react-day-picker/style.css";
+@import "react-phone-number-input/style.css";
 
 /* Theme tokens. Everything a theme can change lives here, scoped under
    [data-theme="<name>"] rather than hardcoded at :root — that's what makes
@@ -303,6 +304,45 @@ body {
 
 .rdp-weekday {
   color: var(--color-text-secondary);
+}
+
+/* react-phone-number-input theming (see src/components/PhoneNumberInput.tsx)
+   — same approach as react-day-picker above. The library declares its
+   --PhoneInput* custom properties once on :root with hardcoded colors (a
+   teal focus color, a black flag border meant for light pages); they're
+   re-declared here on the component itself, so var(--color-*) resolves
+   against the nearest [data-theme] ancestor and a phone field inside an
+   Experience's own theme (e.g. a dark one) follows that theme rather than
+   <html>'s. Tints use color-mix over the theme's own colors so they read
+   on light and dark themes alike. */
+.phone-number-input {
+  --PhoneInput-color--focus: var(--color-accent);
+  --PhoneInputCountrySelectArrow-color: var(--color-text);
+  --PhoneInputCountrySelectArrow-opacity: 0.6;
+  --PhoneInputCountryFlag-borderColor: color-mix(
+    in srgb,
+    var(--color-text) 25%,
+    transparent
+  );
+  --PhoneInputCountryFlag-borderColor--focus: var(--color-accent);
+  --PhoneInputCountryFlag-backgroundColor--loading: color-mix(
+    in srgb,
+    var(--color-text) 10%,
+    transparent
+  );
+  color: var(--color-text);
+}
+
+/* The country <select> is invisible (opacity 0, laid over the flag), but
+   its option list is a real, browser-drawn popup. color-scheme on each
+   theme block already makes that popup dark on dark themes in most
+   browsers; these explicit colors cover the ones that paint options with
+   the select's own colors instead — the same native-control trap the
+   color-scheme note at the top of this file describes. */
+.phone-number-input .PhoneInputCountrySelect,
+.phone-number-input .PhoneInputCountrySelect option {
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 /* Keepsake "Download as PDF" (window.print()) — scoped under

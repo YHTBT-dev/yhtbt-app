@@ -28,8 +28,13 @@ type AutocompleteResponse = {
 //
 // Not debounced here — callers (see LocationAutocompleteInput) are
 // responsible for only calling this after a pause in typing.
+//
+// citiesOnly narrows results to Google's "(cities)" type collection, for
+// fields like the Profile's home city where a street address or venue
+// would be the wrong kind of answer.
 export async function fetchPlaceSuggestions(
-  input: string
+  input: string,
+  { citiesOnly = false }: { citiesOnly?: boolean } = {}
 ): Promise<PlaceSuggestion[]> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
@@ -52,7 +57,9 @@ export async function fetchPlaceSuggestions(
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
         },
-        body: JSON.stringify({ input }),
+        body: JSON.stringify(
+          citiesOnly ? { input, includedPrimaryTypes: ["(cities)"] } : { input }
+        ),
       }
     );
 

@@ -230,7 +230,7 @@ export default function ExperiencesPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">
+    <>
       {isDeletedToastMounted ? (
         <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4">
           <div
@@ -458,6 +458,6 @@ export default function ExperiencesPage() {
           })}
         </div>
       )}
-    </main>
+    </>
   );
 }

@@ -94,6 +94,8 @@ import {
 import { compressImageToBlob } from "@/lib/compressImage";
 import { deleteExperiencePhoto, uploadExperiencePhoto } from "@/lib/supabase";
 import { GUEST_COUNT_FREE_TIER_THRESHOLD } from "@/lib/billing";
+import { isValidPhone } from "@/lib/phone";
+import PhoneNumberInput from "@/components/PhoneNumberInput";
 import DateRangePickerField, {
   type DateRange,
 } from "@/components/DateRangePickerField";
@@ -1720,6 +1722,12 @@ export default function ExperienceDetailPage() {
       setGuestContactError("Enter an email or a phone number.");
       return;
     }
+    // Phone is still optional when there's an email, but anything entered
+    // must be a complete number so only valid E.164 values get stored.
+    if (guestPhone && !isValidPhone(guestPhone)) {
+      setGuestContactError("Enter a valid phone number, or leave it blank.");
+      return;
+    }
     setGuestContactError("");
 
     try {
@@ -1841,6 +1849,10 @@ export default function ExperienceDetailPage() {
     }
     if (!email && !phone) {
       setGuestEditError("Enter an email or a phone number.");
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
+      setGuestEditError("Enter a valid phone number, or leave it blank.");
       return;
     }
 
@@ -2612,18 +2624,22 @@ export default function ExperienceDetailPage() {
               />
             </label>
 
-            <label className="block">
-              <span className="text-sm tracking-wide text-muted uppercase">
+            <div>
+              <label
+                htmlFor="guest-phone"
+                className="text-sm tracking-wide text-muted uppercase"
+              >
                 Phone
-              </span>
-              <input name="guestPhone" autoComplete="off"
-                type="tel"
+              </label>
+              <PhoneNumberInput
+                id="guest-phone"
+                name="guestPhone"
+                autoComplete="off"
                 value={guestPhone}
-                onChange={(event) => setGuestPhone(event.target.value)}
-                placeholder="(555) 123-4567"
-                className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground placeholder:text-placeholder placeholder:text-sm placeholder:italic focus:border-accent focus:outline-none"
+                onChange={setGuestPhone}
+                className="mt-2 font-serif text-lg"
               />
-            </label>
+            </div>
 
             <p className="text-sm text-muted">
               Provide an email or a phone number — at least one is required.
@@ -2825,24 +2841,27 @@ export default function ExperienceDetailPage() {
                           className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
                         />
                       </label>
-                      <label className="block">
-                        <span className="text-sm tracking-wide text-muted uppercase">
+                      <div>
+                        <label
+                          htmlFor={`guest-edit-phone-${guest.id}`}
+                          className="text-sm tracking-wide text-muted uppercase"
+                        >
                           Phone
-                        </span>
-                        <input
-                          type="tel"
+                        </label>
+                        <PhoneNumberInput
+                          id={`guest-edit-phone-${guest.id}`}
                           name="guestEditPhone"
                           autoComplete="off"
                           value={guestEditDraft.phone ?? ""}
-                          onChange={(event) =>
+                          onChange={(phone) =>
                             setGuestEditDraft((current) => ({
                               ...current,
-                              phone: event.target.value,
+                              phone,
                             }))
                           }
-                          className="mt-2 w-full border-b border-foreground/10 bg-transparent pb-2 font-serif text-lg text-foreground focus:border-accent focus:outline-none"
+                          className="mt-2 font-serif text-lg"
                         />
-                      </label>
+                      </div>
                     </div>
                     {guestEditError ? (
                       <p className="text-sm text-red-600">{guestEditError}</p>

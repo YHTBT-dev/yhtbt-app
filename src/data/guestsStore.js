@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase";
+import { normalizePhoneNumber } from "@/lib/phone";
 
 const TABLE_NAME = "guests";
 
@@ -34,7 +35,7 @@ function rowToGuest(row) {
     experienceId: String(row.experience_id),
     name: row.name,
     email: row.email ?? "",
-    phone: row.phone ?? "",
+    phone: normalizePhoneNumber(row.phone),
     rsvpStatus: row.rsvp_status,
     everConfirmed: !!row.ever_confirmed,
   };

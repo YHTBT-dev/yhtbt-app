@@ -37,8 +37,21 @@ const PHOTOS_BUCKET = "experience-photos";
 // The path is namespaced by experienceId so a bucket listing stays
 // organized per Experience, with a random id so two uploads never collide.
 export async function uploadExperiencePhoto(experienceId: string, blob: Blob) {
+  return uploadToPhotosBucket(`${experienceId}/${crypto.randomUUID()}.jpg`, blob);
+}
+
+// Profile photos share the same bucket under profiles/<browserId>/, kept
+// apart from the numeric per-Experience folders. Removed again with
+// deleteExperiencePhoto, which works for any public URL in this bucket.
+export async function uploadProfilePhoto(browserId: string, blob: Blob) {
+  return uploadToPhotosBucket(
+    `profiles/${browserId}/${crypto.randomUUID()}.jpg`,
+    blob
+  );
+}
+
+async function uploadToPhotosBucket(filePath: string, blob: Blob) {
   const supabase = getSupabaseClient();
-  const filePath = `${experienceId}/${crypto.randomUUID()}.jpg`;
 
   const { error } = await supabase.storage
     .from(PHOTOS_BUCKET)

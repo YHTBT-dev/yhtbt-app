@@ -40,7 +40,7 @@ export default function ActivityPage() {
   }, [sortedActivity, search]);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
+    <div className="max-w-3xl">
       <h1 className="font-serif text-3xl text-foreground sm:text-4xl">
         Activity
       </h1>
@@ -77,6 +77,6 @@ export default function ActivityPage() {
           ))}
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -14,6 +14,9 @@ type LocationAutocompleteInputProps = {
   // Locations already used in this Experience, offered ahead of the Google
   // Places results (filtered by what's been typed) so a repeat is one tap.
   recentLocations?: string[];
+  // Only suggest cities (e.g. the Profile's home city) rather than any
+  // place. Free text is still accepted either way.
+  citiesOnly?: boolean;
   className?: string;
 };
 
@@ -32,6 +35,7 @@ export default function LocationAutocompleteInput({
   required,
   name,
   recentLocations,
+  citiesOnly = false,
   className,
 }: LocationAutocompleteInputProps) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -221,7 +225,7 @@ export default function LocationAutocompleteInput({
 
     debounceRef.current = setTimeout(async () => {
       latestQueryRef.current = trimmed;
-      const results = await fetchPlaceSuggestions(trimmed);
+      const results = await fetchPlaceSuggestions(trimmed, { citiesOnly });
       if (latestQueryRef.current !== trimmed) return;
       console.log(
         `[LocationAutocomplete] setting ${results.length} suggestion(s), opening:`,
